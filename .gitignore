@@ -1,0 +1,73 @@
+# Node
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+public/build/
+.vite/
+.vite-test/
+
+# Next.js
+.next/
+out/
+
+# Vite, SvelteKit, Parcel, etc.
+.svelte-kit/
+.cache/
+.parcel-cache/
+
+# Production / static exports
+/.turbo/
+.vercel/
+.netlify/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment variables (keep example files)
+.env
+.env.local
+.env.*.local
+
+# TypeScript
+*.tsbuildinfo
+
+# Coverage
+coverage/
+coverage-*.*
+*.lcov
+
+# Testing
+jest.config.*.cache
+.playwright/
+test-results/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Misc caches
+.cache/
+*.log
+
+# Optional npm cache folders
+.npm/
+
+# Ignore lockfile for yarn/pnpm? Usually you should commit lockfiles, so don't ignore:
+# yarn.lock
+# package-lock.json
+# pnpm-lock.yaml
