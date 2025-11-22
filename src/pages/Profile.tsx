@@ -1,224 +1,266 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import { auth } from "../lib/firebase";
 import { api } from "../lib/api";
 
-/** 
- * Profile page for user to view and edit their information
- * Implements usability heuristic: User control and freedom
+interface UserProfile {
+  firstName: string;
+  lastName: string;
+  age: number | null;
+  email: string;
+}
+
+/**
+ * Profile screen
+ * - Shows and updates basic user info
+ * - Allows account deletion
+ * - Uses Firebase ID token for backend authorization
  */
 export default function Profile() {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [loadingProfile, setLoadingProfile] = useState(false);
   const [saving, setSaving] = useState(false);
-  const uid = auth.currentUser?.uid;
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
-  useEffect(() => { 
-    (async() => {
-      if (!uid) {
-        setLoading(false);
-        return;
-      }
-      
-      try {
-        console.log("Fetching profile for UID:", uid);
-        const response = await api.getUser(uid);
-        console.log("Profile API response:", response);
-        
-        if (response.success && response.user) {
-          setData(response.user);
-        } else {
-          setError("Failed to load profile data");
-        }
-      } catch (err: any) {
-        console.error("Error fetching profile:", err);
-        setError(err.message || "Failed to load profile");
-      } finally {
-        setLoading(false);
-      }
-    })(); 
-  }, [uid]);
+  // Listen to Firebase auth state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setFirebaseUser(user);
+      setLoadingUser(false);
+    });
 
-  async function save() {
-    if (!uid || !data) return;
-    
-    setSaving(true);
+    return () => unsubscribe();
+  }, []);
+
+  async function fetchProfile() {
+    if (!firebaseUser) return;
+    setLoadingProfile(true);
+    setError(null);
+
     try {
-      // Preparar los datos para enviar - manejar correctamente el tipo de age
-      const updateData: any = {
-        firstName: data.firstName || '',
-        lastName: data.lastName || '',
-        email: data.email || ''
-      };
-      
-      // Manejar age correctamente - puede ser string o number
-      if (data.age !== undefined && data.age !== null && data.age !== '') {
-        updateData.age = Number(data.age);
-      } else {
-        updateData.age = null;
-      }
-      
-      await api.updateUser(uid, updateData);
-      alert("Profile updated successfully!");
+      const response: any = await api.getUser(firebaseUser.uid);
+      const data = response.user ?? response;
+
+      setProfile({
+        firstName: data.firstName ?? "",
+        lastName: data.lastName ?? "",
+        age: data.age ?? null,
+        email: data.email ?? firebaseUser.email ?? "",
+      });
     } catch (err: any) {
-      console.error("Error updating profile:", err);
-      alert("Failed to update profile: " + err.message);
+      const message = String(err?.message || err);
+
+      if (
+        message.includes("AUTH_REQUIRED") ||
+        message.includes("Authorization header is required") ||
+        message.includes("Invalid or expired token")
+      ) {
+        setError("Your session has expired. Please login again.");
+      } else {
+        setError(message);
+      }
+    } finally {
+      setLoadingProfile(false);
+    }
+  }
+
+  // Load profile when we have an authenticated user
+  useEffect(() => {
+    if (firebaseUser) {
+      fetchProfile();
+    }
+  }, [firebaseUser]);
+
+  async function handleSave() {
+    if (!firebaseUser || !profile) return;
+    setSaving(true);
+    setError(null);
+
+    try {
+      await api.updateUser(firebaseUser.uid, {
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        age: profile.age,
+        email: profile.email,
+      });
+      await fetchProfile();
+    } catch (err: any) {
+      setError(String(err?.message || err));
     } finally {
       setSaving(false);
     }
   }
 
-  async function destroy() {
-    if (!uid) return;
-    
-    if (!confirm("This will delete your account permanently. Continue?")) return;
-    
+  async function handleDelete() {
+    if (!firebaseUser) return;
+    const confirmed = window.confirm(
+      "This will delete your LinkUp account and profile. Continue?"
+    );
+    if (!confirmed) return;
+
     try {
-      await api.deleteUser(uid);
-      await auth.signOut();
-      window.location.href = "/";
+      await api.deleteUser(firebaseUser.uid);
+      navigate("/auth/login");
     } catch (err: any) {
-      console.error("Error deleting account:", err);
-      alert("Failed to delete account: " + err.message);
+      setError(String(err?.message || err));
     }
   }
 
-  if (!uid) {
+  // === UI states ===
+
+  if (loadingUser) {
     return (
-      <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-8 text-center">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">Please Login</h1>
-        <p className="text-gray-600 mb-6">You need to be logged in to view your profile.</p>
-        <a 
-          href="/auth/login" 
-          className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors"
-        >
-          Go to Login
-        </a>
-      </div>
+      <main className="flex items-center justify-center min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-50">
+        <p className="text-sm text-slate-400">Cargando perfil...</p>
+      </main>
     );
   }
 
-  if (loading) {
+  if (!firebaseUser) {
+    // No logged user
     return (
-      <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-8 text-center">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-3/4 mx-auto mb-4"></div>
-          <div className="space-y-3">
-            <div className="h-4 bg-gray-200 rounded"></div>
-            <div className="h-4 bg-gray-200 rounded"></div>
-            <div className="h-4 bg-gray-200 rounded w-5/6"></div>
-          </div>
+      <main className="flex items-center justify-center min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-50">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl px-8 py-10 text-center shadow-xl">
+          <h1 className="text-xl font-semibold mb-3">No estás logueado</h1>
+          <p className="text-sm text-slate-400 mb-6">
+            Inicia sesión para ver y editar tu perfil de LinkUp.
+          </p>
+          <button
+            className="h-11 px-6 rounded-lg bg-sky-500 text-sm font-medium hover:bg-sky-400"
+            onClick={() => navigate("/auth/login")}
+          >
+            Ir a iniciar sesión
+          </button>
         </div>
-        <p className="text-gray-600 mt-4">Loading your profile...</p>
-      </div>
+      </main>
     );
   }
 
-  if (error) {
+  if (error && !profile) {
+    // Initial load failed (this es la tarjeta que estás viendo)
     return (
-      <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-8">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-          <p className="text-red-700 text-center">{error}</p>
+      <main className="flex items-center justify-center min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-50">
+        <div className="w-full max-w-md bg-slate-900 border border-red-500/60 rounded-2xl px-8 py-10 text-center shadow-xl">
+          <p className="mb-4 text-sm text-red-400">{error}</p>
+          <button
+            className="h-11 px-6 rounded-lg bg-sky-500 text-sm font-medium hover:bg-sky-400"
+            onClick={fetchProfile}
+          >
+            Reintentar
+          </button>
         </div>
-        <button 
-          onClick={() => window.location.reload()}
-          className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition-colors"
+      </main>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <main className="flex items-center justify-center min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-50">
+        <p className="text-sm text-slate-400">
+          Datos del perfil no disponibles.
+        </p>
+      </main>
+    );
+  }
+
+  // Normal profile form
+  return (
+    <main className="flex items-center justify-center min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-50">
+      <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl px-8 py-10 shadow-xl">
+        <h1 className="text-2xl font-semibold mb-1">Mi perfil</h1>
+        <p className="text-sm text-slate-400 mb-6">
+          Actualiza tu información básica o elimina tu cuenta de Linkup.
+        </p>
+
+        {error && (
+          <p className="mb-4 text-sm text-red-400" role="alert">
+            {error}
+          </p>
+        )}
+
+        <form
+          className="grid gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSave();
+          }}
         >
-          Try Again
+          <label className="text-sm grid gap-1">
+            <span>Nombres</span>
+            <input
+              className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
+              value={profile.firstName}
+              onChange={(e) =>
+                setProfile({ ...profile, firstName: e.target.value })
+              }
+              aria-label="First name"
+            />
+          </label>
+
+          <label className="text-sm grid gap-1">
+            <span>Apellidos</span>
+            <input
+              className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
+              value={profile.lastName}
+              onChange={(e) =>
+                setProfile({ ...profile, lastName: e.target.value })
+              }
+              aria-label="Last name"
+            />
+          </label>
+
+          <label className="text-sm grid gap-1">
+            <span>Edad</span>
+            <input
+              type="number"
+              className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
+              value={profile.age ?? ""}
+              onChange={(e) =>
+                setProfile({
+                  ...profile,
+                  age: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+              aria-label="Age"
+            />
+          </label>
+
+          <label className="text-sm grid gap-1">
+            <span>Correo</span>
+            <input
+              type="email"
+              className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
+              value={profile.email}
+              onChange={(e) =>
+                setProfile({ ...profile, email: e.target.value })
+              }
+              aria-label="Email"
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={saving || loadingProfile}
+            className="mt-2 h-11 rounded-lg bg-sky-500 text-sm font-medium hover:bg-sky-400 disabled:opacity-60"
+          >
+            {saving ? "Guardando..." : "Guardar cambios"}
+          </button>
+        </form>
+
+        <hr className="my-6 border-slate-800" />
+
+        <button
+          type="button"
+          onClick={handleDelete}
+          className="h-11 w-full rounded-lg border border-red-500/70 text-sm text-red-300 hover:bg-red-500/10"
+        >
+          Eliminar cuenta
         </button>
       </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-8 text-center">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">No Profile Data</h1>
-        <p className="text-gray-600">Unable to load your profile information.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-8">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Profile</h1>
-        <p className="text-gray-600">Manage your account information</p>
-      </div>
-
-      <div className="space-y-6">
-        <div>
-          <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-2">
-            First Name
-          </label>
-          <input
-            id="firstName"
-            className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-            value={data.firstName || ""}
-            onChange={e => setData({...data, firstName: e.target.value})}
-            aria-label="First name"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-2">
-            Last Name
-          </label>
-          <input
-            id="lastName"
-            className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-            value={data.lastName || ""}
-            onChange={e => setData({...data, lastName: e.target.value})}
-            aria-label="Last name"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-2">
-            Age
-          </label>
-          <input
-            id="age"
-            className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-            type="number"
-            min="1"
-            max="120"
-            value={data.age ?? ''}
-            onChange={e => setData({...data, age: e.target.value === '' ? null : e.target.value})}
-            aria-label="Age"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-            Email
-          </label>
-          <input
-            id="email"
-            className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-            type="email"
-            value={data.email || ""}
-            onChange={e => setData({...data, email: e.target.value})}
-            aria-label="Email"
-          />
-        </div>
-
-        <div className="flex gap-3 pt-4">
-          <button
-            onClick={save}
-            disabled={saving}
-            className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold"
-          >
-            {saving ? "Saving..." : "Save Changes"}
-          </button>
-          <button
-            onClick={destroy}
-            className="flex-1 bg-red-600 text-white py-3 px-6 rounded-xl hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-200 font-semibold"
-          >
-            Delete Account
-          </button>
-        </div>
-      </div>
-    </div>
+    </main>
   );
 }

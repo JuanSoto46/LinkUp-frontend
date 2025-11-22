@@ -1,88 +1,61 @@
 import { FormEvent, useState } from "react";
-import { api } from "../../lib/api";
+import { resetPassword } from "../../lib/firebase";
 
 /**
- * Password reset page
- * Implements WCAG operable: Clear error messages and success feedback
+ * Forgot password screen.
  */
 export default function ResetPassword() {
   const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
 
-  /**
-   * Handle password reset form submission
-   */
-  async function onSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setMessage("");
-    setError("");
-    setLoading(true);
+    setMsg("");
+    setErr("");
 
     try {
-      await api.forgotPassword(email);
-      setMessage("Password reset email sent. Check your inbox.");
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to send password reset email");
-    } finally {
-      setLoading(false);
+      await resetPassword(email);
+      setMsg("Te enviamos un correo para restablecer tu contraseña.");
+    } catch (error: any) {
+      setErr(
+        error?.message || "No se pudo enviar el correo de recuperación."
+      );
     }
   }
 
   return (
-    <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-8 border border-gray-100">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Reset password</h1>
-        <p className="text-gray-600">Enter your email to receive a reset link</p>
-      </div>
-
-      {message && (
-        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg" role="alert">
-          <p className="text-green-700 text-center">{message}</p>
-        </div>
-      )}
-
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg" role="alert">
-          <p className="text-red-700 text-center">{error}</p>
-        </div>
-      )}
-
-      <form onSubmit={onSubmit} className="space-y-6">
-        <div>
-          <label htmlFor="reset-email" className="block text-sm font-medium text-gray-700 mb-2">
-            Email address
-          </label>
-          <input
-            id="reset-email"
-            className="input-field"
-            placeholder="Enter your email"
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-            aria-required="true"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 px-6 rounded-xl hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold text-lg shadow-lg hover:shadow-xl"
-        >
-          {loading ? "Sending..." : "Send reset link"}
-        </button>
-      </form>
-
-      <div className="mt-6 text-center">
-        <p className="text-gray-600">
-          Remember your password?{" "}
-          <a href="/auth/login" className="text-blue-600 hover:text-blue-800 font-semibold transition-colors">
-            Back to login
-          </a>
+    <main className="flex items-center justify-center min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-50">
+      <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl px-8 py-10 shadow-xl">
+        <h1 className="text-2xl font-semibold mb-3">
+          Recuperar contraseña
+        </h1>
+        <p className="text-sm text-slate-400 mb-4">
+          Ingresa el correo con el que te registraste. Te enviaremos
+          un enlace para crear una nueva contraseña.
         </p>
+
+        {msg && <p className="mb-3 text-sm text-emerald-400">{msg}</p>}
+        {err && <p className="mb-3 text-sm text-red-400">{err}</p>}
+
+        <form onSubmit={handleSubmit} className="grid gap-4">
+          <label className="text-sm grid gap-1">
+            <span>Correo electrónico</span>
+            <input
+              type="email"
+              className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
+              placeholder="nombre@correo.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </label>
+
+          <button className="h-11 rounded-lg bg-sky-500 text-sm font-medium hover:bg-sky-400">
+            Enviar enlace
+          </button>
+        </form>
       </div>
-    </div>
+    </main>
   );
 }

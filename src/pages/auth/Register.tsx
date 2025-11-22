@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 import { registerEmail } from "../../lib/firebase";
 import { api } from "../../lib/api";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 
 /**
  * User registration page
@@ -29,7 +29,10 @@ export default function Register() {
     setLoading(true);
 
     try {
-      // First try to register in backend (it will handle Firebase Auth)
+      // Register in Firebase Auth first
+      await registerEmail(form.email, form.password);
+      
+      // Then register profile in backend
       const response = await api.registerProfile(form);
       
       if (response.success) {
@@ -39,18 +42,20 @@ export default function Register() {
           navigate('/auth/login');
         }, 2000);
       } else {
-        setError(response.error || "Registration failed");
+        setError(response.error || "Error en el registro");
       }
     } catch (e: any) {
       console.error("Registration error:", e);
       
       // Handle specific error cases
-      if (e.message?.includes('already registered')) {
-        setError("This email is already registered. Please try logging in instead.");
+      if (e.message?.includes('already registered') || e.message?.includes('email-already')) {
+        setError("Este correo electrónico ya está registrado. Por favor, inicia sesión en su lugar.");
       } else if (e.message?.includes('Email already')) {
-        setError("This email is already in use. Please use a different email or try logging in.");
+        setError("Este correo electrónico ya está en uso. Por favor, usa un correo diferente o inicia sesión.");
+      } else if (e.message?.includes('auth/weak-password')) {
+        setError("La contraseña debe tener al menos 6 caracteres.");
       } else {
-        setError(e.message || "Registration failed. Please try again.");
+        setError(e.message || "Error en el registro. Por favor, intenta nuevamente.");
       }
     } finally {
       setLoading(false);
@@ -58,46 +63,62 @@ export default function Register() {
   }
 
   return (
-    <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-8 border border-gray-100">
+    <div className="max-w-md mx-auto bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700 transition-all duration-300 hover:shadow-xl">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Create account</h1>
-        <p className="text-gray-600">Join LinkUp today</p>
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 mb-4">
+          <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+          <span className="text-xs text-blue-400 font-medium">CREAR CUENTA</span>
+        </div>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2">
+          Únete a LinkUp
+        </h1>
+        <p className="text-gray-600 dark:text-gray-300">
+          Crea tu cuenta y comienza a conectar
+        </p>
       </div>
 
       {ok && (
-        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg" role="alert">
-          <p className="text-green-700 text-center">
-            Account created successfully! Redirecting to login...
-          </p>
+        <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl" role="alert">
+          <div className="flex items-center gap-2 text-green-700 dark:text-green-400 text-center">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span>¡Cuenta creada exitosamente! Redirigiendo al inicio de sesión...</span>
+          </div>
         </div>
       )}
       
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg" role="alert">
-          <p className="text-red-700 text-center">{error}</p>
-          {error.includes("already") && (
+        <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl" role="alert">
+          <div className="flex items-center gap-2 text-red-700 dark:text-red-400 text-center">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>{error}</span>
+          </div>
+          {error.includes("ya") && (
             <div className="mt-2 text-center">
-              <a 
-                href="/auth/login" 
-                className="text-blue-600 hover:text-blue-800 font-semibold text-sm"
+              <Link 
+                to="/auth/login" 
+                className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-semibold text-sm transition-colors"
               >
-                Go to Login →
-              </a>
+                Ir al Inicio de Sesión →
+              </Link>
             </div>
           )}
         </div>
       )}
 
       <form onSubmit={onSubmit} className="space-y-6">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-2">
-              First name
+            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Nombre
             </label>
             <input
               id="firstName"
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-              placeholder="John"
+              className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              placeholder="Juan"
               value={form.firstName}
               onChange={e => setForm({...form, firstName: e.target.value})}
               required
@@ -105,13 +126,13 @@ export default function Register() {
             />
           </div>
           <div>
-            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-2">
-              Last name
+            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Apellido
             </label>
             <input
               id="lastName"
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-              placeholder="Doe"
+              className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              placeholder="Pérez"
               value={form.lastName}
               onChange={e => setForm({...form, lastName: e.target.value})}
               required
@@ -121,12 +142,12 @@ export default function Register() {
         </div>
 
         <div>
-          <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-2">
-            Age
+          <label htmlFor="age" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Edad
           </label>
           <input
             id="age"
-            className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
             type="number"
             min="1"
             max="120"
@@ -138,14 +159,14 @@ export default function Register() {
         </div>
 
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-            Email
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Correo Electrónico
           </label>
           <input
             id="email"
-            className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
             type="email"
-            placeholder="john@example.com"
+            placeholder="juan@ejemplo.com"
             value={form.email}
             onChange={e => setForm({...form, email: e.target.value})}
             required
@@ -154,12 +175,12 @@ export default function Register() {
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-            Password
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Contraseña
           </label>
           <input
             id="password"
-            className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
             type="password"
             placeholder="••••••••"
             value={form.password}
@@ -168,27 +189,41 @@ export default function Register() {
             minLength={6}
             disabled={loading}
           />
-          <p className="text-xs text-gray-500 mt-1">Must be at least 6 characters long</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+            La contraseña debe tener al menos 6 caracteres
+          </p>
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 px-6 rounded-xl hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold text-lg shadow-lg hover:shadow-xl"
+          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 px-6 rounded-xl hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 font-semibold text-lg shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
         >
-          {loading ? "Creating account..." : "Create account"}
+          {loading ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <span>Creando cuenta...</span>
+            </>
+          ) : (
+            <>
+              <span>Crear Cuenta</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </>
+          )}
         </button>
       </form>
 
       <div className="mt-6 text-center">
-        <p className="text-gray-600">
-          Already have an account?{" "}
-          <a 
-            href="/auth/login" 
-            className="text-blue-600 hover:text-blue-800 font-semibold transition-colors"
+        <p className="text-gray-600 dark:text-gray-300">
+          ¿Ya tienes una cuenta?{" "}
+          <Link 
+            to="/auth/login" 
+            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-semibold transition-colors"
           >
-            Sign in
-          </a>
+            Iniciar Sesión
+          </Link>
         </p>
       </div>
     </div>

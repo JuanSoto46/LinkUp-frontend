@@ -1,103 +1,93 @@
-/**
- * Firebase configuration and authentication methods
- * @module FirebaseAuth
- */
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  signOut,
+import { initializeApp } from "firebase/app";
+import {
+  getAuth,
   GoogleAuthProvider,
   FacebookAuthProvider,
   signInWithPopup,
-  sendPasswordResetEmail
-} from 'firebase/auth';
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signOut,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+} from "firebase/auth";
 
 /**
- * Firebase configuration object with fallback values
+ * Firebase client configuration.
+ * Values come from Vite environment variables.
  */
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyB0qTBwAf4VfzTNd5awl3E-BoYol454WRU",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "linkup-6b684.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "linkup-6b684",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "linkup-6b684.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "35639479371",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:35639479371:web:6937d517b072e89fe151ce",
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-KJKLEW7DXF"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
 };
 
-/**
- * Initialize Firebase app
- */
 const app = initializeApp(firebaseConfig);
 
-/**
- * Firebase Auth instance
- */
+/** Shared Firebase Auth instance. */
 export const auth = getAuth(app);
 
-/**
- * Google Auth Provider
- */
+/** Manual email/password login. */
+export function loginEmail(email: string, password: string) {
+  return signInWithEmailAndPassword(auth, email, password);
+}
+
+/** Manual email/password registration. */
+export function registerEmail(email: string, password: string) {
+  return createUserWithEmailAndPassword(auth, email, password);
+}
+
+/** Google OAuth login. */
 const googleProvider = new GoogleAuthProvider();
+export function loginGoogle() {
+  return signInWithPopup(auth, googleProvider);
+}
 
-/**
- * Facebook Auth Provider  
- */
+/** Facebook OAuth login. */
 const facebookProvider = new FacebookAuthProvider();
+export function loginFacebook() {
+  return signInWithPopup(auth, facebookProvider);
+}
+
+/** Ask Firebase to send a reset password email. */
+export function resetPassword(email: string) {
+  return sendPasswordResetEmail(auth, email);
+}
 
 /**
- * Login with email and password
- * @param email - User email
- * @param password - User password
- * @returns User credential
+ * Change password for currently logged-in user.
+ * Requires current password re-authentication.
  */
-export const loginEmail = async (email: string, password: string) => {
-  return await signInWithEmailAndPassword(auth, email, password);
-};
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string
+) {
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    throw new Error("No authenticated user.");
+  }
 
-/**
- * Register with email and password
- * @param email - User email
- * @param password - User password
- * @returns User credential
- */
-export const registerEmail = async (email: string, password: string) => {
-  return await createUserWithEmailAndPassword(auth, email, password);
-};
+  const credential = EmailAuthProvider.credential(
+    user.email,
+    currentPassword
+  );
 
-/**
- * Login with Google
- * @returns User credential
- */
-export const loginGoogle = async () => {
-  return await signInWithPopup(auth, googleProvider);
-};
+  await reauthenticateWithCredential(user, credential);
+  await updatePassword(user, newPassword);
+}
 
-/**
- * Login with Facebook
- * @returns User credential
- */
-export const loginFacebook = async () => {
-  return await signInWithPopup(auth, facebookProvider);
-};
+/** Sign out current user. */
+export function logout() {
+  return signOut(auth);
+}
 
-/**
- * Send password reset email
- * @param email - User email
- * @returns Promise
- */
-export const resetPassword = async (email: string) => {
-  return await sendPasswordResetEmail(auth, email);
-};
-
-/**
- * Logout user
- * @returns Promise
- */
-export const logout = async () => {
-  return await signOut(auth);
-};
-
-export default app;
+/** Get Firebase ID token so frontend can call the backend API. */
+export async function getIdToken(): Promise<string | null> {
+  const user = auth.currentUser;
+  if (!user) return null;
+  return user.getIdToken();
+}
