@@ -11,85 +11,106 @@ interface UserProfile {
   email: string;
 }
 
-/**
- * Profile screen
- * - Shows and updates basic user info
- * - Allows account deletion
- * - Uses Firebase ID token for backend authorization
- */
 export default function Profile() {
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loadingUser, setLoadingUser] = useState(true);
-  const [loadingProfile, setLoadingProfile] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
 
-  // Listen to Firebase auth state
+  const [profile, setProfile] = useState<UserProfile>({
+    firstName: "",
+    lastName: "",
+    age: null,
+    email: "",
+  });
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setFirebaseUser(user);
-      setLoadingUser(false);
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (!u) {
+        navigate("/auth/login");
+        return;
+      }
+
+      setFirebaseUser(u);
+      setLoading(true);
+      setError(null);
+      setInfo(null);
+
+      const displayName = (u.displayName || "").trim();
+      const parts = displayName.split(" ");
+      const fbFirstName = parts[0] || "";
+      const fbLastName = parts.slice(1).join(" ") || "";
+
+      try {
+        // 1) Intento traer del backend
+        const res = await api.getUser(u.uid);
+        const data = res.user || res.data || res;
+
+        setProfile({
+          firstName: data.firstName ?? fbFirstName,
+          lastName: data.lastName ?? fbLastName,
+          age: data.age ?? null,
+          email: data.email ?? u.email ?? "",
+        });
+
+        setInfo(null);
+      } catch (e: any) {
+        // 2) Si no existe, intento CREARLO con PUT (muchos backends lo soportan)
+        try {
+          const newProfile: UserProfile = {
+            firstName: fbFirstName || "Usuario",
+            lastName: fbLastName || "",
+            age: null,
+            email: u.email || "",
+          };
+
+          await api.updateUser(u.uid, newProfile);
+
+          setProfile(newProfile);
+          setInfo("Perfil creado automáticamente en el backend.");
+        } catch {
+          // 3) Si no deja crear, muestro fallback sin romper vista
+          setProfile({
+            firstName: fbFirstName,
+            lastName: fbLastName,
+            age: null,
+            email: u.email || "",
+          });
+
+          setInfo(
+            "Tu cuenta existe en Firebase pero no en el backend. Para editar datos debes registrarte manualmente."
+          );
+        }
+      } finally {
+        setLoading(false);
+      }
     });
 
-    return () => unsubscribe();
-  }, []);
+    return () => unsub();
+  }, [navigate]);
 
-  async function fetchProfile() {
-    if (!firebaseUser) return;
-    setLoadingProfile(true);
-    setError(null);
-
-    try {
-      const response: any = await api.getUser(firebaseUser.uid);
-      const data = response.user ?? response;
-
-      setProfile({
-        firstName: data.firstName ?? "",
-        lastName: data.lastName ?? "",
-        age: data.age ?? null,
-        email: data.email ?? firebaseUser.email ?? "",
-      });
-    } catch (err: any) {
-      const message = String(err?.message || err);
-
-      if (
-        message.includes("AUTH_REQUIRED") ||
-        message.includes("Authorization header is required") ||
-        message.includes("Invalid or expired token")
-      ) {
-        setError("Your session has expired. Please login again.");
-      } else {
-        setError(message);
-      }
-    } finally {
-      setLoadingProfile(false);
-    }
+  function onChange<K extends keyof UserProfile>(key: K, value: UserProfile[K]) {
+    setProfile((p) => ({ ...p, [key]: value }));
   }
 
-  // Load profile when we have an authenticated user
-  useEffect(() => {
-    if (firebaseUser) {
-      fetchProfile();
-    }
-  }, [firebaseUser]);
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!firebaseUser) return;
 
-  async function handleSave() {
-    if (!firebaseUser || !profile) return;
-    setSaving(true);
     setError(null);
+    setInfo(null);
+    setSaving(true);
 
     try {
-      await api.updateUser(firebaseUser.uid, {
-        firstName: profile.firstName,
-        lastName: profile.lastName,
-        age: profile.age,
-        email: profile.email,
-      });
-      await fetchProfile();
-    } catch (err: any) {
-      setError(String(err?.message || err));
+      await api.updateUser(firebaseUser.uid, profile);
+      setInfo("Perfil actualizado.");
+    } catch (e: any) {
+      setError(e.message || "No se pudo actualizar el perfil.");
     } finally {
       setSaving(false);
     }
@@ -97,170 +118,113 @@ export default function Profile() {
 
   async function handleDelete() {
     if (!firebaseUser) return;
-    const confirmed = window.confirm(
-      "This will delete your LinkUp account and profile. Continue?"
-    );
-    if (!confirmed) return;
+    if (!confirm("¿Seguro que quieres eliminar tu cuenta?")) return;
 
+    setDeleting(true);
+    setError(null);
     try {
       await api.deleteUser(firebaseUser.uid);
+      await firebaseUser.delete();
       navigate("/auth/login");
-    } catch (err: any) {
-      setError(String(err?.message || err));
+    } catch (e: any) {
+      setError(e.message || "No se pudo eliminar la cuenta.");
+    } finally {
+      setDeleting(false);
     }
   }
 
-  // === UI states ===
-
-  if (loadingUser) {
+  if (loading) {
     return (
-      <main className="flex items-center justify-center min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-50">
-        <p className="text-sm text-slate-400">Cargando perfil...</p>
-      </main>
+      <div className="rounded-2xl border border-slate-800 bg-[#050816] p-6 text-sm text-slate-300 animate-pulse">
+        Cargando perfil...
+      </div>
     );
   }
 
-  if (!firebaseUser) {
-    // No logged user
-    return (
-      <main className="flex items-center justify-center min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-50">
-        <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl px-8 py-10 text-center shadow-xl">
-          <h1 className="text-xl font-semibold mb-3">No estás logueado</h1>
-          <p className="text-sm text-slate-400 mb-6">
-            Inicia sesión para ver y editar tu perfil de LinkUp.
-          </p>
-          <button
-            className="h-11 px-6 rounded-lg bg-sky-500 text-sm font-medium hover:bg-sky-400"
-            onClick={() => navigate("/auth/login")}
-          >
-            Ir a iniciar sesión
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  if (error && !profile) {
-    // Initial load failed (this es la tarjeta que estás viendo)
-    return (
-      <main className="flex items-center justify-center min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-50">
-        <div className="w-full max-w-md bg-slate-900 border border-red-500/60 rounded-2xl px-8 py-10 text-center shadow-xl">
-          <p className="mb-4 text-sm text-red-400">{error}</p>
-          <button
-            className="h-11 px-6 rounded-lg bg-sky-500 text-sm font-medium hover:bg-sky-400"
-            onClick={fetchProfile}
-          >
-            Reintentar
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  if (!profile) {
-    return (
-      <main className="flex items-center justify-center min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-50">
-        <p className="text-sm text-slate-400">
-          Datos del perfil no disponibles.
-        </p>
-      </main>
-    );
-  }
-
-  // Normal profile form
   return (
-    <main className="flex items-center justify-center min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-50">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl px-8 py-10 shadow-xl">
-        <h1 className="text-2xl font-semibold mb-1">Mi perfil</h1>
-        <p className="text-sm text-slate-400 mb-6">
-          Actualiza tu información básica o elimina tu cuenta de Linkup.
-        </p>
+    <main className="max-w-xl mx-auto">
+      <h1 className="text-2xl font-semibold text-slate-50 mb-6">Mi perfil</h1>
 
-        {error && (
-          <p className="mb-4 text-sm text-red-400" role="alert">
-            {error}
-          </p>
-        )}
+      {info && (
+        <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200">
+          {info}
+        </div>
+      )}
 
-        <form
-          className="grid gap-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSave();
-          }}
-        >
-          <label className="text-sm grid gap-1">
-            <span>Nombres</span>
+      {error && (
+        <div className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
+          {error}
+        </div>
+      )}
+
+      <form
+        onSubmit={handleSave}
+        className="rounded-2xl border border-slate-800 bg-[#050816] p-6 space-y-4"
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-slate-400">Nombres</label>
             <input
-              className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
+              className="mt-1 h-11 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
               value={profile.firstName}
-              onChange={(e) =>
-                setProfile({ ...profile, firstName: e.target.value })
-              }
-              aria-label="First name"
+              onChange={(e) => onChange("firstName", e.target.value)}
+              required
             />
-          </label>
+          </div>
 
-          <label className="text-sm grid gap-1">
-            <span>Apellidos</span>
+          <div>
+            <label className="text-xs text-slate-400">Apellidos</label>
             <input
-              className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
+              className="mt-1 h-11 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
               value={profile.lastName}
-              onChange={(e) =>
-                setProfile({ ...profile, lastName: e.target.value })
-              }
-              aria-label="Last name"
+              onChange={(e) => onChange("lastName", e.target.value)}
+              required
             />
-          </label>
+          </div>
+        </div>
 
-          <label className="text-sm grid gap-1">
-            <span>Edad</span>
-            <input
-              type="number"
-              className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
-              value={profile.age ?? ""}
-              onChange={(e) =>
-                setProfile({
-                  ...profile,
-                  age: e.target.value ? Number(e.target.value) : null,
-                })
-              }
-              aria-label="Age"
-            />
-          </label>
+        <div>
+          <label className="text-xs text-slate-400">Edad</label>
+          <input
+            type="number"
+            min={1}
+            className="mt-1 h-11 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
+            value={profile.age ?? ""}
+            onChange={(e) =>
+              onChange("age", e.target.value ? Number(e.target.value) : null)
+            }
+          />
+        </div>
 
-          <label className="text-sm grid gap-1">
-            <span>Correo</span>
-            <input
-              type="email"
-              className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
-              value={profile.email}
-              onChange={(e) =>
-                setProfile({ ...profile, email: e.target.value })
-              }
-              aria-label="Email"
-            />
-          </label>
+        <div>
+          <label className="text-xs text-slate-400">Correo</label>
+          <input
+            type="email"
+            className="mt-1 h-11 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
+            value={profile.email}
+            onChange={(e) => onChange("email", e.target.value)}
+            required
+          />
+        </div>
 
-          <button
-            type="submit"
-            disabled={saving || loadingProfile}
-            className="mt-2 h-11 rounded-lg bg-sky-500 text-sm font-medium hover:bg-sky-400 disabled:opacity-60"
-          >
-            {saving ? "Guardando..." : "Guardar cambios"}
-          </button>
-        </form>
+        <button
+          disabled={saving}
+          className="h-11 w-full rounded-lg bg-sky-600 hover:bg-sky-500 text-sm font-semibold disabled:opacity-60"
+        >
+          {saving ? "Guardando..." : "Guardar cambios"}
+        </button>
 
         <hr className="my-6 border-slate-800" />
 
         <button
           type="button"
+          disabled={deleting}
           onClick={handleDelete}
-          className="h-11 w-full rounded-lg border border-red-500/70 text-sm text-red-300 hover:bg-red-500/10"
+          className="h-11 w-full rounded-lg border border-red-500/70 text-sm text-red-300 hover:bg-red-500/10 disabled:opacity-60"
         >
-          Eliminar cuenta
+          {deleting ? "Eliminando..." : "Eliminar cuenta"}
         </button>
-      </div>
+      </form>
     </main>
   );
 }
