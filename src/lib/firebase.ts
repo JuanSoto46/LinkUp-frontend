@@ -12,6 +12,7 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
 } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 /**
  * Firebase client configuration.
@@ -30,6 +31,9 @@ const app = initializeApp(firebaseConfig);
 
 /** Shared Firebase Auth instance. */
 export const auth = getAuth(app);
+
+/** Shared Firestore DB instance. */
+export const db = getFirestore(app);
 
 /** Manual email/password login. */
 export function loginEmail(email: string, password: string) {

@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { auth, logout } from "../lib/firebase";
 import { useEffect, useState } from "react";
 
@@ -9,182 +9,189 @@ import { useEffect, useState } from "react";
 export default function Header() {
   const [user, setUser] = useState(auth.currentUser);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(setUser);
     return unsubscribe;
   }, []);
 
-  /**
-   * Handle user logout
-   */
-  const handleLogout = async () => {
-    try {
-      await logout();
-      localStorage.removeItem('auth_token');
-      setIsMenuOpen(false);
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
+  const isAuthRoute = location.pathname.startsWith("/auth");
 
   return (
-    <header className="bg-white shadow-sm border-b">
-      <nav className="container mx-auto px-4 py-3">
-        <div className="flex items-center justify-between">
-          {/* Logo */}
-          <Link 
-            to="/" 
-            className="text-2xl font-bold text-blue-600 hover:text-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
-          >
-            LinkUp
-          </Link>
-
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-6">
-            <Link 
-              to="/" 
-              className="text-gray-700 hover:text-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
-            >
-              Home
-            </Link>
-            <Link 
-              to="/explore" 
-              className="text-gray-700 hover:text-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
-            >
-              Explore
-            </Link>
-            <Link 
-              to="/about" 
-              className="text-gray-700 hover:text-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
-            >
-              About
-            </Link>
-            <Link 
-              to="/create-meeting" 
-              className="text-gray-700 hover:text-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
-            >
-              Create Meeting
-            </Link>
-
-            {user ? (
-              <div className="flex items-center space-x-4">
-                <Link 
-                  to="/profile" 
-                  className="text-gray-700 hover:text-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
-                >
-                  Profile
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors"
-                >
-                  Logout
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center space-x-3">
-                <Link 
-                  to="/auth/login" 
-                  className="text-gray-700 hover:text-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
-                >
-                  Login
-                </Link>
-                <Link 
-                  to="/auth/register" 
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-                >
-                  Sign Up
-                </Link>
-              </div>
-            )}
+    <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm">
+      <nav className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-6">
+        {/* Logo */}
+        <Link
+          to="/"
+          className="flex items-center gap-2 px-2 rounded-full focus:outline-none focus:ring-2 focus:ring-sky-500"
+        >
+          <div className="w-9 h-9 rounded-full bg-emerald-400 grid place-items-center text-slate-950 font-black">
+            L
           </div>
+          <span className="font-bold tracking-wide text-slate-50">LinkUp</span>
+        </Link>
 
-          {/* Mobile menu button */}
-          <button
-            className="md:hidden p-2 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            aria-label="Toggle menu"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {isMenuOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+        {/* Desktop nav */}
+        <div className="hidden md:flex items-center gap-6 text-sm text-slate-200">
+          {!isAuthRoute && (
+            <>
+              <Link
+                to="/"
+                className={`hover:text-sky-400 ${
+                  location.pathname === "/" ? "text-sky-400" : ""
+                }`}
+              >
+                Inicio
+              </Link>
+
+              <Link
+                to="/about"
+                className={`hover:text-sky-400 ${
+                  location.pathname === "/about" ? "text-sky-400" : ""
+                }`}
+              >
+                Sobre nosotros
+              </Link>
+
+              {user && (
+                <>
+                  <Link
+                    to="/meetings"
+                    className={`hover:text-sky-400 ${
+                      location.pathname === "/meetings" ? "text-sky-400" : ""
+                    }`}
+                  >
+                    Mis reuniones
+                  </Link>
+                  <Link
+                    to="/explore"
+                    className={`hover:text-sky-400 ${
+                      location.pathname === "/explore" ? "text-sky-400" : ""
+                    }`}
+                  >
+                    Explorar
+                  </Link>
+                </>
               )}
-            </svg>
-          </button>
+            </>
+          )}
+
+          {!user ? (
+            !isAuthRoute && (
+              <>
+                <Link
+                  to="/auth/login"
+                  className="text-sm font-semibold px-5 py-2 rounded-full border border-slate-600 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-950"
+                >
+                  Iniciar sesión
+                </Link>
+                <Link
+                  to="/auth/register"
+                  className="text-sm font-semibold px-5 py-2 rounded-full bg-sky-600 hover:bg-sky-500 text-slate-50 shadow focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-950"
+                >
+                  Crear cuenta
+                </Link>
+              </>
+            )
+          ) : (
+            <button
+              onClick={logout}
+              className="text-sm font-semibold px-5 py-2 rounded-full border border-red-500/70 text-red-200 hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-950"
+            >
+              Cerrar sesión
+            </button>
+          )}
         </div>
 
-        {/* Mobile Navigation */}
-        {isMenuOpen && (
-          <div className="md:hidden mt-4 space-y-3 pb-4">
-            <Link 
-              to="/" 
-              className="block text-gray-700 hover:text-blue-600 transition-colors py-2"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              Home
-            </Link>
-            <Link 
-              to="/explore" 
-              className="block text-gray-700 hover:text-blue-600 transition-colors py-2"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              Explore
-            </Link>
-            <Link 
-              to="/about" 
-              className="block text-gray-700 hover:text-blue-600 transition-colors py-2"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              About
-            </Link>
-            <Link 
-              to="/create-meeting" 
-              className="block text-gray-700 hover:text-blue-600 transition-colors py-2"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              Create Meeting
-            </Link>
-            
-            {user ? (
+        {/* Mobile menu button */}
+        <button
+          className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-xl hover:bg-slate-900 text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+          onClick={() => setIsMenuOpen((v) => !v)}
+          aria-label="Toggle menu"
+          aria-expanded={isMenuOpen}
+        >
+          <span className="block w-5 h-0.5 bg-slate-100 mb-1.5" />
+          <span className="block w-5 h-0.5 bg-slate-100 mb-1.5" />
+          <span className="block w-5 h-0.5 bg-slate-100" />
+        </button>
+      </nav>
+
+      {/* Mobile menu */}
+      {isMenuOpen && (
+        <div className="md:hidden border-t border-slate-800 bg-slate-950">
+          <div className="mx-auto max-w-6xl px-6 py-4 flex flex-col gap-3 text-sm">
+            {!isAuthRoute && (
               <>
-                <Link 
-                  to="/profile" 
-                  className="block text-gray-700 hover:text-blue-600 transition-colors py-2"
+                <Link
+                  to="/"
                   onClick={() => setIsMenuOpen(false)}
+                  className="hover:text-sky-400"
                 >
-                  Profile
+                  Inicio
                 </Link>
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Logout
-                </button>
-              </>
-            ) : (
-              <>
-                <Link 
-                  to="/auth/login" 
-                  className="block text-gray-700 hover:text-blue-600 transition-colors py-2"
+                <Link
+                  to="/about"
                   onClick={() => setIsMenuOpen(false)}
+                  className="hover:text-sky-400"
                 >
-                  Login
+                  Sobre nosotros
                 </Link>
-                <Link 
-                  to="/auth/register" 
-                  className="block bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Sign Up
-                </Link>
+
+                {user && (
+                  <>
+                    <Link
+                      to="/meetings"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="hover:text-sky-400"
+                    >
+                      Mis reuniones
+                    </Link>
+                    <Link
+                      to="/explore"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="hover:text-sky-400"
+                    >
+                      Explorar
+                    </Link>
+                  </>
+                )}
               </>
             )}
+
+            {!user ? (
+              !isAuthRoute && (
+                <>
+                  <Link
+                    to="/auth/login"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-700 hover:bg-slate-900"
+                  >
+                    Iniciar sesión
+                  </Link>
+                  <Link
+                    to="/auth/register"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-slate-50 text-center"
+                  >
+                    Crear cuenta
+                  </Link>
+                </>
+              )
+            ) : (
+              <button
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  logout();
+                }}
+                className="px-4 py-2 rounded-xl border border-red-500/70 text-red-200 hover:bg-red-500/10 text-left"
+              >
+                Cerrar sesión
+              </button>
+            )}
           </div>
-        )}
-      </nav>
+        </div>
+      )}
     </header>
   );
 }
