@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import {
   getAuth,
   GoogleAuthProvider,
-  FacebookAuthProvider,
+  GithubAuthProvider,
   signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -26,6 +26,7 @@ const firebaseConfig = {
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
 };
 
+
 const app = initializeApp(firebaseConfig);
 
 /** Shared Firebase Auth instance. */
@@ -47,10 +48,10 @@ export function loginGoogle() {
   return signInWithPopup(auth, googleProvider);
 }
 
-/** Facebook OAuth login. */
-const facebookProvider = new FacebookAuthProvider();
-export function loginFacebook() {
-  return signInWithPopup(auth, facebookProvider);
+/** Github OAuth login. */
+const githubProvider = new GithubAuthProvider();
+export function loginGithub() {
+  return signInWithPopup(auth, githubProvider);
 }
 
 /** Ask Firebase to send a reset password email. */

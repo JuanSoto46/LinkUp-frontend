@@ -3,9 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   loginEmail,
   loginGoogle,
-  loginFacebook,
+  loginGithub,
 } from "../../lib/firebase";
-
+import { api } from "../../lib/api";
 /**
  * Login screen: email + providers.
  */
@@ -42,21 +42,37 @@ export default function Login() {
   async function handleGoogle() {
     setError(null);
     try {
-      await loginGoogle();
+      const login = await loginGoogle();
+      const {uid, displayName , email} = login.user;
+      if (!email || !uid || !displayName) {
+        setError("No se pudo iniciar sesión con Google.");
+        return;
+      }
+      const age = null;
+      // TO DO:
+      // Cambiar esto y añadirle una capa para que busque si l usuario ya esta registrado para evitar hacer todo esto jajaja
+      await api.createOAuthProfile({userProfile: {uid, displayName, age, email}, provider: "google"});
       navigate("/profile");
     } catch {
       setError("No se pudo iniciar sesión con Google.");
     }
   }
 
-  async function handleFacebook() {
+  async function handleGithub() {
     setError(null);
     try {
-      await loginFacebook();
+      const login = await loginGithub();
+      const {uid, displayName , email} = login.user;
+      if (!uid || !displayName) {
+        setError("No se pudo iniciar sesión con Github.");
+        return;
+      }
+      const age = null;
+      const response = await api.createOAuthProfile({userProfile: {uid, displayName, age, email}, provider: "github"});
       navigate("/profile");
     } catch {
       setError(
-        "No se pudo iniciar sesión con Facebook. Revisa la configuración de dominios."
+        "No se pudo iniciar sesión con Github. Revisa la configuración de dominios."
       );
     }
   }
@@ -156,14 +172,14 @@ export default function Login() {
           {import.meta.env.VITE_FACEBOOK_PROVIDER_ENABLED === "true" && (
             <button
               type="button"
-              onClick={handleFacebook}
+              onClick={handleGithub}
               className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm flex items-center gap-3 hover:border-sky-500"
             >
-              <span className="h-7 w-7 rounded-full bg-blue-600 grid place-items-center text-xs font-bold">
-                f
+              <span className="h-7 w-7 rounded-full bg-gray-600 grid place-items-center text-xs font-bold">
+                Git
               </span>
               <span className="flex-1 text-left">
-                Continúa con Facebook
+                Continúa con Github
               </span>
             </button>
           )}

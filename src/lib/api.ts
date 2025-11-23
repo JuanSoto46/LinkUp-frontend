@@ -66,4 +66,19 @@ export const api = {
       if (!r.ok) throw new Error(await r.text());
       return r.json();
     }),
+
+  // Create profile for OAuth users (after first login)
+  createOAuthProfile: (payload: {
+    userProfile: {
+      displayName: string | null; 
+      age: number | null;
+      email: string | null;
+      uid: string;
+    }
+    provider: string;
+  }) =>
+    authedFetch(`/api/oauth/${payload.provider}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };
