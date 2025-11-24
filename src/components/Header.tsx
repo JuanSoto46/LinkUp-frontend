@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { auth, logout } from "../lib/firebase";
 import { useEffect, useState } from "react";
 
@@ -10,6 +10,7 @@ export default function Header() {
   const [user, setUser] = useState(auth.currentUser);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(setUser);
@@ -17,6 +18,7 @@ export default function Header() {
   }, []);
 
   const isAuthRoute = location.pathname.startsWith("/auth");
+  const isCallRoute = location.pathname === "/call";
   const isActive = (path: string) => location.pathname === path;
 
   const displayName =
@@ -26,8 +28,10 @@ export default function Header() {
    * Regla simple:
    * - SIN usuario: header completo (nav, botones, etc.).
    * - CON usuario: solo logo, sin menú, sin texto, sin botones arriba.
+   * - EN LLAMADA: logo + botón volver
    */
-  const isCompactHeader = !!user;
+  const isCompactHeader = !!user && !isCallRoute;
+  const isCallHeader = !!user && isCallRoute;
 
   return (
     <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm">
@@ -46,8 +50,9 @@ export default function Header() {
           </span>
         </Link>
 
-        {/* Si el header es compacto (usuario logueado), NO mostramos nada más */}
-        {!isCompactHeader && (
+
+        {/* Si el header es compacto (usuario logueado normal), NO mostramos nada más */}
+        {!isCompactHeader && !isCallHeader && (
           <>
             {/* Desktop nav */}
             <div className="hidden md:flex items-center gap-6 text-sm text-slate-200">
@@ -125,7 +130,7 @@ export default function Header() {
       </nav>
 
       {/* Mobile menu */}
-      {!isCompactHeader && isMenuOpen && (
+      {!isCompactHeader && !isCallHeader && isMenuOpen && (
         <div className="md:hidden border-t border-slate-800 bg-slate-950">
           <div className="mx-auto max-w-6xl px-4 py-4 flex flex-col gap-3 text-sm">
             {!isAuthRoute && (

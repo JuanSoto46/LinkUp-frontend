@@ -107,6 +107,12 @@ export const api = {
     authedFetch(`/api/meetings`, { method: "GET" }),
 
   /**
+   * Get a specific meeting by ID
+   */
+  getMeeting: (id: string) =>
+    authedFetch(`/api/meetings/${id}`, { method: "GET" }),
+
+  /**
    * Update a meeting (title, description, scheduledAt)
    */
   updateMeeting: (

@@ -13,6 +13,7 @@ import CreateMeeting from "./pages/CreateMeeting";
 import Profile from "./pages/Profile";
 import Meetings from "./pages/Meetings";
 import Call from "./pages/Call";
+import JoinMeeting from "./pages/JoinMeeting";
 
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
@@ -102,6 +103,16 @@ export default function App() {
                 }
               />
               <Route
+                path="/join-meeting"
+                element={
+                  <RequireAuth>
+                    <DashboardLayout>
+                      <JoinMeeting />
+                    </DashboardLayout>
+                  </RequireAuth>
+                }
+              />
+              <Route
                 path="/profile"
                 element={
                   <RequireAuth>
@@ -111,13 +122,14 @@ export default function App() {
                   </RequireAuth>
                 }
               />
+              
+              {/* ✅ Call page sin DashboardLayout para pantalla completa */}
               <Route
                 path="/call"
                 element={
                   <RequireAuth>
-                    <DashboardLayout>
-                      <Call />
-                    </DashboardLayout>
+                    {/* ✅ Envolver en fragmento */}
+                    <Call />
                   </RequireAuth>
                 }
               />

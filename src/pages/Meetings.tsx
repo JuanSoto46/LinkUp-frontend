@@ -188,6 +188,20 @@ export default function Meetings() {
     }
   }
 
+  /**
+   * Navigate to join meeting page for entering meeting ID
+   */
+  function handleJoinMeeting() {
+    navigate("/join-meeting");
+  }
+
+  /**
+   * Enter directly into an existing meeting
+   */
+  function handleEnterMeeting(meetingId: string) {
+    navigate(`/call?meetingId=${meetingId}`);
+  }
+
   return (
     <div className="max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -198,16 +212,16 @@ export default function Meetings() {
         <div className="flex gap-3">
           <button
             className="px-4 py-2 rounded-full border border-slate-600 text-sm text-slate-200 hover:bg-slate-800"
-            onClick={() => navigate("/call")}
+            onClick={handleJoinMeeting}
           >
-            Unirse
+            Unirse a reunión
           </button>
 
           <button
             className="px-4 py-2 rounded-full bg-sky-600 text-sm text-slate-50 hover:bg-sky-500 shadow"
             onClick={() => navigate("/create-meeting")}
           >
-            Crear
+            Crear reunión
           </button>
         </div>
       </div>
@@ -350,9 +364,7 @@ export default function Meetings() {
                       <button
                         className="text-xs px-3 py-1.5 rounded-full border border-slate-700 text-slate-200 hover:bg-slate-800"
                         type="button"
-                        onClick={() =>
-                          navigate(`/call?meetingId=${m.id}`)
-                        }
+                        onClick={() => handleEnterMeeting(m.id)}
                       >
                         Entrar
                       </button>

@@ -47,18 +47,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             );
           })}
 
-          {/* Accesos rápidos adicionales */}
-          <button
-            onClick={() => navigate("/call")}
-            className={`px-4 py-2 rounded-full text-xs whitespace-nowrap border transition ${
-              location.pathname === "/call"
-                ? "bg-emerald-500 border-emerald-400 text-slate-950 font-semibold"
-                : "bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800"
-            }`}
-          >
-            Llamada (demo)
-          </button>
-
           <button
             onClick={() => navigate("/about")}
             className="px-4 py-2 rounded-full text-xs whitespace-nowrap border border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 transition"
@@ -89,17 +77,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           })}
 
           <div className="pt-4 border-t border-slate-800">
-            <button
-              onClick={() => navigate("/call")}
-              className={`w-full text-left px-4 py-2.5 rounded-xl text-sm transition ${
-                location.pathname === "/call"
-                  ? "bg-emerald-500 text-slate-950 font-semibold"
-                  : "text-slate-200 hover:bg-slate-900"
-              }`}
-            >
-              Llamada (demo)
-            </button>
-
+            {/* ✅ Se eliminó el botón "Llamada (demo)" */}
             <button
               onClick={() => navigate("/about")}
               className="w-full text-left px-4 py-2.5 rounded-xl text-sm text-slate-200 hover:bg-slate-900 transition"

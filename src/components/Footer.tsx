@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { auth } from "../lib/firebase";
+import { useLocation } from "react-router-dom";
 
 /**
  * Footer component with sitemap and information
@@ -9,6 +10,7 @@ import { auth } from "../lib/firebase";
 export default function Footer() {
   const currentYear = new Date().getFullYear();
   const [user, setUser] = useState(auth.currentUser);
+  const location = useLocation();
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(setUser);
@@ -17,6 +19,11 @@ export default function Footer() {
 
   const displayName =
     user?.displayName || user?.email || "Usuario";
+
+  // No mostrar footer en la página de llamada
+  if (location.pathname === "/call") {
+    return null;
+  }
 
   return (
     <footer className="bg-gray-800 text-white mt-auto">
