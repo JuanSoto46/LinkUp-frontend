@@ -17,6 +17,10 @@ export default function Header() {
   }, []);
 
   const isAuthRoute = location.pathname.startsWith("/auth");
+  const isActive = (path: string) => location.pathname === path;
+
+  const displayName =
+    user?.displayName || user?.email || "Usuario";
 
   return (
     <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm">
@@ -25,11 +29,14 @@ export default function Header() {
         <Link
           to="/"
           className="flex items-center gap-2 px-2 rounded-full focus:outline-none focus:ring-2 focus:ring-sky-500"
+          onClick={() => setIsMenuOpen(false)}
         >
           <div className="w-9 h-9 rounded-full bg-emerald-400 grid place-items-center text-slate-950 font-black">
             L
           </div>
-          <span className="font-bold tracking-wide text-slate-50">LinkUp</span>
+          <span className="font-bold tracking-wide text-slate-50">
+            LinkUp
+          </span>
         </Link>
 
         {/* Desktop nav */}
@@ -39,7 +46,7 @@ export default function Header() {
               <Link
                 to="/"
                 className={`hover:text-sky-400 ${
-                  location.pathname === "/" ? "text-sky-400" : ""
+                  isActive("/") ? "text-sky-400" : ""
                 }`}
               >
                 Inicio
@@ -48,23 +55,21 @@ export default function Header() {
               <Link
                 to="/about"
                 className={`hover:text-sky-400 ${
-                  location.pathname === "/about" ? "text-sky-400" : ""
+                  isActive("/about") ? "text-sky-400" : ""
                 }`}
               >
                 Sobre nosotros
               </Link>
 
               {user && (
-                <>
-                  <Link
-                    to="/meetings"
-                    className={`hover:text-sky-400 ${
-                      location.pathname === "/meetings" ? "text-sky-400" : ""
-                    }`}
-                  >
-                    Mis reuniones
-                  </Link>
-                </>
+                <Link
+                  to="/meetings"
+                  className={`hover:text-sky-400 ${
+                    isActive("/meetings") ? "text-sky-400" : ""
+                  }`}
+                >
+                  Panel principal
+                </Link>
               )}
             </>
           )}
@@ -87,12 +92,21 @@ export default function Header() {
               </>
             )
           ) : (
-            <button
-              onClick={logout}
-              className="text-sm font-semibold px-5 py-2 rounded-full border border-red-500/70 text-red-200 hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-950"
-            >
-              Cerrar sesión
-            </button>
+            <>
+              {/* Sesión iniciada - desktop */}
+              <div className="hidden lg:flex flex-col items-end text-xs text-slate-300 max-w-[220px]">
+                <span>Sesión iniciada como</span>
+                <span className="text-slate-50 truncate">
+                  {displayName}
+                </span>
+              </div>
+              <button
+                onClick={logout}
+                className="text-sm font-semibold px-5 py-2 rounded-full border border-red-500/70 text-red-200 hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-950"
+              >
+                Cerrar sesión
+              </button>
+            </>
           )}
         </div>
 
@@ -112,52 +126,75 @@ export default function Header() {
       {/* Mobile menu */}
       {isMenuOpen && (
         <div className="md:hidden border-t border-slate-800 bg-slate-950">
-          <div className="mx-auto max-w-6xl px-6 py-4 flex flex-col gap-3 text-sm">
+          <div className="mx-auto max-w-6xl px-4 py-4 flex flex-col gap-3 text-sm">
             {!isAuthRoute && (
               <>
                 <Link
                   to="/"
                   onClick={() => setIsMenuOpen(false)}
-                  className="hover:text-sky-400"
+                  className={`px-2 py-1 rounded-lg ${
+                    isActive("/")
+                      ? "text-sky-400"
+                      : "hover:text-sky-400"
+                  }`}
                 >
                   Inicio
                 </Link>
+
                 <Link
                   to="/about"
                   onClick={() => setIsMenuOpen(false)}
-                  className="hover:text-sky-400"
+                  className={`px-2 py-1 rounded-lg ${
+                    isActive("/about")
+                      ? "text-sky-400"
+                      : "hover:text-sky-400"
+                  }`}
                 >
                   Sobre nosotros
                 </Link>
 
                 {user && (
-                  <>
-                    <Link
-                      to="/meetings"
-                      onClick={() => setIsMenuOpen(false)}
-                      className="hover:text-sky-400"
-                    >
-                      Mis reuniones
-                    </Link>
-                    <Link
-                      to="/explore"
-                      onClick={() => setIsMenuOpen(false)}
-                      className="hover:text-sky-400"
-                    >
-                      Explorar
-                    </Link>
-                  </>
+                  <Link
+                    to="/meetings"
+                    onClick={() => setIsMenuOpen(false)}
+                    className={`px-2 py-1 rounded-lg ${
+                      isActive("/meetings")
+                        ? "text-sky-400"
+                        : "hover:text-sky-400"
+                    }`}
+                  >
+                    Panel principal
+                  </Link>
                 )}
               </>
             )}
 
-            {!user ? (
+            {user ? (
+              <>
+                {/* Sesión iniciada - mobile */}
+                <p className="text-xs text-slate-300 mt-2">
+                  Sesión iniciada como{" "}
+                  <span className="text-slate-50">
+                    {displayName}
+                  </span>
+                </p>
+                <button
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    logout();
+                  }}
+                  className="mt-1 px-4 py-2 rounded-xl border border-red-500/70 text-red-200 hover:bg-red-500/10 text-left"
+                >
+                  Cerrar sesión
+                </button>
+              </>
+            ) : (
               !isAuthRoute && (
                 <>
                   <Link
                     to="/auth/login"
                     onClick={() => setIsMenuOpen(false)}
-                    className="px-4 py-2 rounded-xl border border-slate-700 hover:bg-slate-900"
+                    className="px-4 py-2 rounded-xl border border-slate-700 hover:bg-slate-900 text-center"
                   >
                     Iniciar sesión
                   </Link>
@@ -170,16 +207,6 @@ export default function Header() {
                   </Link>
                 </>
               )
-            ) : (
-              <button
-                onClick={() => {
-                  setIsMenuOpen(false);
-                  logout();
-                }}
-                className="px-4 py-2 rounded-xl border border-red-500/70 text-red-200 hover:bg-red-500/10 text-left"
-              >
-                Cerrar sesión
-              </button>
             )}
           </div>
         </div>
