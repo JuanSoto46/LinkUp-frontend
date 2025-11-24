@@ -39,69 +39,70 @@ export default function ChangePassword() {
       navigate("/auth/login", { replace: true });
     } catch (err: any) {
       console.error(err);
-      setError(
-        err?.message || "No se pudo actualizar la contraseña."
-      );
+      setError(err?.message || "No se pudo actualizar la contraseña.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl px-8 py-10 shadow-xl">
-      <h1 className="text-2xl font-semibold mb-6">
-        Cambiar contraseña
-      </h1>
+    <div className="flex-1 flex justify-center px-4 pb-10">
+      <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl px-8 py-10 shadow-xl">
+        <h1 className="text-2xl font-semibold mb-6 text-slate-50 text-center md:text-left">
+          Cambiar contraseña
+        </h1>
 
-      {message && (
-        <p className="mb-4 text-sm text-emerald-400">{message}</p>
-      )}
-      {error && (
-        <p className="mb-4 text-sm text-red-400">{error}</p>
-      )}
+        {message && (
+          <p className="mb-4 text-sm text-emerald-400">{message}</p>
+        )}
+        {error && (
+          <p className="mb-4 text-sm text-red-400">{error}</p>
+        )}
 
-      <form onSubmit={onSubmit} className="grid gap-4">
-        <label className="text-sm grid gap-1">
-          <span>Contraseña actual</span>
-          <input
-            type="password"
-            className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            required
-          />
-        </label>
+        <form onSubmit={onSubmit} className="grid gap-4">
+          <label className="text-sm grid gap-1 text-slate-100">
+            <span>Contraseña actual</span>
+            <input
+              type="password"
+              className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm text-slate-50"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+            />
+          </label>
 
-        <label className="text-sm grid gap-1">
-          <span>Nueva contraseña</span>
-          <input
-            type="password"
-            className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            required
-          />
-        </label>
+          <label className="text-sm grid gap-1 text-slate-100">
+            <span>Nueva contraseña</span>
+            <input
+              type="password"
+              className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm text-slate-50"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+            />
+          </label>
 
-        <label className="text-sm grid gap-1">
-          <span>Confirmar contraseña</span>
-          <input
-            type="password"
-            className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-          />
-        </label>
+          <label className="text-sm grid gap-1 text-slate-100">
+            <span>Confirmar contraseña</span>
+            <input
+              type="password"
+              className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm text-slate-50"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+            />
+          </label>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-2 h-11 rounded-lg bg-sky-500 text-sm font-medium hover:bg-sky-400 disabled:opacity-60"
-        >
-          {loading ? "Guardando..." : "Guardar cambios"}
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={loading}
+            className="mt-2 h-11 rounded-lg bg-sky-500 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-60"
+          >
+            {loading ? "Guardando..." : "Guardar cambios"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
+

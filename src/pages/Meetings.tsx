@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 
+/**
+ * Meeting entity as returned by the backend API.
+ */
 type Meeting = {
   id: string;
   title: string;
@@ -11,7 +14,11 @@ type Meeting = {
 };
 
 /**
- * Formatea fecha/hora ISO a texto legible en español.
+ * Formats an ISO date/time string into a human readable
+ * Spanish representation used in the meetings list.
+ *
+ * @param value - ISO date string or null/undefined.
+ * @returns Formatted string ready to render.
  */
 function formatDateTime(value?: string | null): string {
   if (!value) return "Sin fecha programada";
@@ -23,6 +30,15 @@ function formatDateTime(value?: string | null): string {
   });
 }
 
+/**
+ * Meetings page that allows the user to:
+ * - list their meetings
+ * - edit title / description / scheduled date-time
+ * - delete a meeting
+ * - navigate to join or create a meeting
+ *
+ * It relies on the backend API exposed in ../lib/api.
+ */
 export default function Meetings() {
   const navigate = useNavigate();
 
@@ -37,12 +53,17 @@ export default function Meetings() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  /**
+   * Fetches the meetings from the backend and updates local state.
+   * Handles loading and error states.
+   */
   async function loadMeetings() {
     setLoading(true);
     setError(null);
     try {
       const res = await api.getMeetings();
-      // El backend probablemente devuelve un array directo
+      // Backend most likely returns a plain array,
+      // but we try a few common shapes to be safe.
       const list: Meeting[] = Array.isArray(res)
         ? res
         : (res as any).meetings || (res as any).data || [];
@@ -58,6 +79,12 @@ export default function Meetings() {
     loadMeetings();
   }, []);
 
+  /**
+   * Starts editing mode for a given meeting and
+   * pre-fills the local form state.
+   *
+   * @param meeting - Meeting to be edited.
+   */
   function startEdit(meeting: Meeting) {
     setEditingId(meeting.id);
     setEditTitle(meeting.title || "");
@@ -66,7 +93,7 @@ export default function Meetings() {
     if (meeting.scheduledAt) {
       const d = new Date(meeting.scheduledAt);
       if (!Number.isNaN(d.getTime())) {
-        // Pasar de ISO a valor compatible con datetime-local
+        // Convert ISO to a value compatible with datetime-local
         const pad = (n: number) => String(n).padStart(2, "0");
         const local = new Date(
           d.getTime() - d.getTimezoneOffset() * 60000
@@ -85,6 +112,9 @@ export default function Meetings() {
     }
   }
 
+  /**
+   * Resets the editing state and clears the temporary form values.
+   */
   function cancelEdit() {
     setEditingId(null);
     setEditTitle("");
@@ -92,6 +122,12 @@ export default function Meetings() {
     setEditScheduledAt("");
   }
 
+  /**
+   * Persists the edited meeting data to the backend and
+   * updates the local list with the returned entity.
+   *
+   * @param id - ID of the meeting being saved.
+   */
   async function handleSave(id: string) {
     try {
       setSavingId(id);
@@ -113,10 +149,7 @@ export default function Meetings() {
         payload.scheduledAt = null;
       }
 
-      const updated = (await api.updateMeeting(
-        id,
-        payload
-      )) as Meeting;
+      const updated = (await api.updateMeeting(id, payload)) as Meeting;
 
       setMeetings((prev) =>
         prev.map((m) => (m.id === id ? updated : m))
@@ -130,14 +163,17 @@ export default function Meetings() {
     }
   }
 
+  /**
+   * Asks for confirmation and, if accepted, deletes a meeting
+   * using the backend API, then removes it from local state.
+   *
+   * @param id - ID of the meeting to delete.
+   */
   async function handleDelete(id: string) {
-    if (
-      !window.confirm(
-        "¿Seguro que deseas eliminar/cancelar esta reunión?"
-      )
-    ) {
-      return;
-    }
+    const confirmed = window.confirm(
+      "¿Seguro que deseas eliminar/cancelar esta reunión?"
+    );
+    if (!confirmed) return;
 
     try {
       setDeletingId(id);
@@ -214,6 +250,15 @@ export default function Meetings() {
               >
                 {isEditing ? (
                   <div className="flex-1 grid gap-3 text-sm">
+                    <p className="text-[11px] text-slate-400 mb-1 break-all">
+                      <span className="font-semibold">
+                        ID de reunión:
+                      </span>{" "}
+                      <span className="font-mono">
+                        {m.id}
+                      </span>
+                    </p>
+
                     <label className="grid gap-1">
                       <span>Título de la reunión</span>
                       <input
@@ -260,6 +305,15 @@ export default function Meetings() {
                     </p>
                     <p className="text-xs text-slate-400">
                       Programada: {formatDateTime(m.scheduledAt)}
+                    </p>
+
+                    <p className="text-[11px] text-slate-500 mt-1 break-all">
+                      <span className="font-semibold">
+                        ID de reunión:
+                      </span>{" "}
+                      <span className="font-mono">
+                        {m.id}
+                      </span>
                     </p>
 
                     {m.description && (

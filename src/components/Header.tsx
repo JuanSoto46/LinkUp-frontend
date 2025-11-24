@@ -22,12 +22,19 @@ export default function Header() {
   const displayName =
     user?.displayName || user?.email || "Usuario";
 
+  /**
+   * Regla simple:
+   * - SIN usuario: header completo (nav, botones, etc.).
+   * - CON usuario: solo logo, sin menú, sin texto, sin botones arriba.
+   */
+  const isCompactHeader = !!user;
+
   return (
     <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm">
       <nav className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-6">
         {/* Logo */}
         <Link
-          to="/"
+          to={user ? "/meetings" : "/"}
           className="flex items-center gap-2 px-2 rounded-full focus:outline-none focus:ring-2 focus:ring-sky-500"
           onClick={() => setIsMenuOpen(false)}
         >
@@ -39,92 +46,86 @@ export default function Header() {
           </span>
         </Link>
 
-        {/* Desktop nav */}
-        <div className="hidden md:flex items-center gap-6 text-sm text-slate-200">
-          {!isAuthRoute && (
-            <>
-              <Link
-                to="/"
-                className={`hover:text-sky-400 ${
-                  isActive("/") ? "text-sky-400" : ""
-                }`}
-              >
-                Inicio
-              </Link>
+        {/* Si el header es compacto (usuario logueado), NO mostramos nada más */}
+        {!isCompactHeader && (
+          <>
+            {/* Desktop nav */}
+            <div className="hidden md:flex items-center gap-6 text-sm text-slate-200">
+              {!isAuthRoute && (
+                <>
+                  <Link
+                    to="/"
+                    className={`hover:text-sky-400 ${
+                      isActive("/") ? "text-sky-400" : ""
+                    }`}
+                  >
+                    Inicio
+                  </Link>
 
-              <Link
-                to="/about"
-                className={`hover:text-sky-400 ${
-                  isActive("/about") ? "text-sky-400" : ""
-                }`}
-              >
-                Sobre nosotros
-              </Link>
-
-              {user && (
-                <Link
-                  to="/meetings"
-                  className={`hover:text-sky-400 ${
-                    isActive("/meetings") ? "text-sky-400" : ""
-                  }`}
-                >
-                  Panel principal
-                </Link>
+                  <Link
+                    to="/about"
+                    className={`hover:text-sky-400 ${
+                      isActive("/about") ? "text-sky-400" : ""
+                    }`}
+                  >
+                    Sobre nosotros
+                  </Link>
+                </>
               )}
-            </>
-          )}
 
-          {!user ? (
-            !isAuthRoute && (
-              <>
-                <Link
-                  to="/auth/login"
-                  className="text-sm font-semibold px-5 py-2 rounded-full border border-slate-600 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-950"
-                >
-                  Iniciar sesión
-                </Link>
-                <Link
-                  to="/auth/register"
-                  className="text-sm font-semibold px-5 py-2 rounded-full bg-sky-600 hover:bg-sky-500 text-slate-50 shadow focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-950"
-                >
-                  Crear cuenta
-                </Link>
-              </>
-            )
-          ) : (
-            <>
-              {/* Sesión iniciada - desktop */}
-              <div className="hidden lg:flex flex-col items-end text-xs text-slate-300 max-w-[220px]">
-                <span>Sesión iniciada como</span>
-                <span className="text-slate-50 truncate">
-                  {displayName}
-                </span>
-              </div>
-              <button
-                onClick={logout}
-                className="text-sm font-semibold px-5 py-2 rounded-full border border-red-500/70 text-red-200 hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-950"
-              >
-                Cerrar sesión
-              </button>
-            </>
-          )}
-        </div>
+              {!user ? (
+                !isAuthRoute && (
+                  <>
+                    <Link
+                      to="/auth/login"
+                      className="text-sm font-semibold px-5 py-2 rounded-full border border-slate-600 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-950"
+                    >
+                      Iniciar sesión
+                    </Link>
+                    <Link
+                      to="/auth/register"
+                      className="text-sm font-semibold px-5 py-2 rounded-full bg-sky-600 hover:bg-sky-500 text-slate-50 shadow focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-950"
+                    >
+                      Crear cuenta
+                    </Link>
+                  </>
+                )
+              ) : (
+                <>
+                  {/* Sesión iniciada - desktop */}
+                  <div className="hidden lg:flex flex-col items-end text-xs text-slate-300 max-w-[220px]">
+                    <span>Sesión iniciada como</span>
+                    <span className="text-slate-50 truncate">
+                      {displayName}
+                    </span>
+                  </div>
+                  <button
+                    onClick={logout}
+                    className="text-sm font-semibold px-5 py-2 rounded-full border border-red-500/70 text-red-200 hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-950"
+                  >
+                    Cerrar sesión
+                  </button>
+                </>
+              )}
+            </div>
 
-        {/* Mobile menu button */}
-        <button
-          className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-xl hover:bg-slate-900 text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-          onClick={() => setIsMenuOpen((v) => !v)}
-          aria-label="Toggle menu"
-          aria-expanded={isMenuOpen}
-        >
-          <span className="block w-5 h-0.5 bg-slate-100 mb-1.5" />
-          <span className="block w-5 h-0.5 bg-slate-100 mb-1.5" />
-          <span className="block w-5 h-0.5 bg-slate-100" />
-        </button>
+            {/* Mobile menu button */}
+            <button
+              className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-xl hover:bg-slate-900 text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              onClick={() => setIsMenuOpen((v) => !v)}
+              aria-label="Toggle menu"
+              aria-expanded={isMenuOpen}
+            >
+              <span className="block w-5 h-0.5 bg-slate-100 mb-1.5" />
+              <span className="block w-5 h-0.5 bg-slate-100 mb-1.5" />
+              <span className="block w-5 h-0.5 bg-slate-100" />
+            </button>
+          </>
+        )}
       </nav>
 
       {/* Mobile menu */}
-      {isMenuOpen && (
+      {!isCompactHeader && isMenuOpen && (
         <div className="md:hidden border-t border-slate-800 bg-slate-950">
           <div className="mx-auto max-w-6xl px-4 py-4 flex flex-col gap-3 text-sm">
             {!isAuthRoute && (
@@ -152,61 +153,26 @@ export default function Header() {
                 >
                   Sobre nosotros
                 </Link>
-
-                {user && (
-                  <Link
-                    to="/meetings"
-                    onClick={() => setIsMenuOpen(false)}
-                    className={`px-2 py-1 rounded-lg ${
-                      isActive("/meetings")
-                        ? "text-sky-400"
-                        : "hover:text-sky-400"
-                    }`}
-                  >
-                    Panel principal
-                  </Link>
-                )}
               </>
             )}
 
-            {user ? (
+            {!user && !isAuthRoute && (
               <>
-                {/* Sesión iniciada - mobile */}
-                <p className="text-xs text-slate-300 mt-2">
-                  Sesión iniciada como{" "}
-                  <span className="text-slate-50">
-                    {displayName}
-                  </span>
-                </p>
-                <button
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    logout();
-                  }}
-                  className="mt-1 px-4 py-2 rounded-xl border border-red-500/70 text-red-200 hover:bg-red-500/10 text-left"
+                <Link
+                  to="/auth/login"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-700 hover:bg-slate-900 text-center"
                 >
-                  Cerrar sesión
-                </button>
+                  Iniciar sesión
+                </Link>
+                <Link
+                  to="/auth/register"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-slate-50 text-center"
+                >
+                  Crear cuenta
+                </Link>
               </>
-            ) : (
-              !isAuthRoute && (
-                <>
-                  <Link
-                    to="/auth/login"
-                    onClick={() => setIsMenuOpen(false)}
-                    className="px-4 py-2 rounded-xl border border-slate-700 hover:bg-slate-900 text-center"
-                  >
-                    Iniciar sesión
-                  </Link>
-                  <Link
-                    to="/auth/register"
-                    onClick={() => setIsMenuOpen(false)}
-                    className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-slate-50 text-center"
-                  >
-                    Crear cuenta
-                  </Link>
-                </>
-              )
             )}
           </div>
         </div>
