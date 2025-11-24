@@ -32,6 +32,8 @@ const githubProvider = new GithubAuthProvider();
 
 /** Shared Firebase Auth instance. */
 export const auth = getAuth(app);
+auth.languageCode = "es";
+
 
 /** Shared Firestore DB instance. */
 export const db = getFirestore(app);

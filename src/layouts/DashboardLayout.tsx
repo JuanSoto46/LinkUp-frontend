@@ -23,7 +23,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const navItems = [
     { to: "/meetings", label: "Mis reuniones" },
     { to: "/profile", label: "Mi perfil" },
-    { to: "/change-password", label: "Cambiar contraseña" },
+    { to: "/auth/change-password", label: "Cambiar contraseña" },
   ];
 
   return (
