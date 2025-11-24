@@ -29,10 +29,8 @@ export default function Register() {
     setLoading(true);
 
     try {
-      // Register in Firebase Auth first
-      await registerEmail(form.email, form.password);
-      
-      // Then register profile in backend
+    
+      // Register profile in the backend ( Auth & DB info ) NOT REGISTER AUTH HERE 
       const response = await api.registerProfile(form);
       
       if (response.success) {
