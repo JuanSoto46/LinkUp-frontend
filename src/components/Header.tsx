@@ -64,14 +64,6 @@ export default function Header() {
                   >
                     Mis reuniones
                   </Link>
-                  <Link
-                    to="/explore"
-                    className={`hover:text-sky-400 ${
-                      location.pathname === "/explore" ? "text-sky-400" : ""
-                    }`}
-                  >
-                    Explorar
-                  </Link>
                 </>
               )}
             </>

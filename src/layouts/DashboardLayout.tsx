@@ -19,11 +19,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     return unsubscribe;
   }, [navigate]);
 
-  // ❌ Quitamos "Crear reunión" del menú
+ 
   const navItems = [
     { to: "/meetings", label: "Mis reuniones" },
-    { to: "/explore", label: "Explorar" },
     { to: "/profile", label: "Mi perfil" },
+    { to: "/change-password", label: "Cambiar contraseña" },
   ];
 
   return (

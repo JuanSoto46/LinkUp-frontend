@@ -9,7 +9,6 @@ import DashboardLayout from "./layouts/DashboardLayout";
 
 import Home from "./pages/Home";
 import About from "./pages/About";
-import Explore from "./pages/Explore";
 import CreateMeeting from "./pages/CreateMeeting";
 import Profile from "./pages/Profile";
 import Meetings from "./pages/Meetings";
@@ -88,16 +87,6 @@ export default function App() {
                   <RequireAuth>
                     <DashboardLayout>
                       <Meetings />
-                    </DashboardLayout>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/explore"
-                element={
-                  <RequireAuth>
-                    <DashboardLayout>
-                      <Explore />
                     </DashboardLayout>
                   </RequireAuth>
                 }

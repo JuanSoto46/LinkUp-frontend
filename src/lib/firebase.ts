@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import {
   getAuth,
   GoogleAuthProvider,
-  FacebookAuthProvider,
+  GithubAuthProvider,
   signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -28,6 +28,7 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+const githubProvider = new GithubAuthProvider();
 
 /** Shared Firebase Auth instance. */
 export const auth = getAuth(app);
@@ -51,10 +52,11 @@ export function loginGoogle() {
   return signInWithPopup(auth, googleProvider);
 }
 
-/** Facebook OAuth login. */
-const facebookProvider = new FacebookAuthProvider();
-export function loginFacebook() {
-  return signInWithPopup(auth, facebookProvider);
+/**
+ * GitHub login via popup.
+ */
+export function loginGithub() {
+  return signInWithPopup(auth, githubProvider);
 }
 
 /** Ask Firebase to send a reset password email. */

@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   loginEmail,
   loginGoogle,
-  loginFacebook,
+  loginGithub
 } from "../../lib/firebase";
 
 /**
@@ -49,17 +49,39 @@ export default function Login() {
     }
   }
 
-  async function handleFacebook() {
+     async function handleGithub() {
     setError(null);
     try {
-      await loginFacebook();
+      await loginGithub();
       navigate("/profile");
-    } catch {
-      setError(
-        "No se pudo iniciar sesión con Facebook. Revisa la configuración de dominios."
-      );
+    } catch (err: any) {
+      console.error(err);
+
+      let msg = "No se pudo iniciar sesión con GitHub.";
+
+      switch (err?.code) {
+        case "auth/operation-not-allowed":
+          msg =
+            "GitHub no está habilitado como proveedor en Firebase. Revisa la consola de Firebase en Autenticación → Métodos de acceso.";
+          break;
+        case "auth/account-exists-with-different-credential":
+          msg =
+            "Ya existe una cuenta con este correo usando otro proveedor. Inicia sesión con el proveedor original y vincula GitHub.";
+          break;
+        case "auth/popup-blocked":
+          msg =
+            "El navegador bloqueó la ventana emergente. Habilita las ventanas emergentes para este sitio.";
+          break;
+        case "auth/unauthorized-domain":
+          msg =
+            "El dominio actual no está autorizado en Firebase. Revisa Autenticación → Configuración.";
+          break;
+      }
+
+      setError(msg);
     }
   }
+
 
   return (
     <main className="flex items-center justify-center min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-50">
@@ -153,21 +175,22 @@ export default function Login() {
             </button>
           )}
 
-          {import.meta.env.VITE_FACEBOOK_PROVIDER_ENABLED === "true" && (
-            <button
-              type="button"
-              onClick={handleFacebook}
-              className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm flex items-center gap-3 hover:border-sky-500"
-            >
-              <span className="h-7 w-7 rounded-full bg-blue-600 grid place-items-center text-xs font-bold">
-                f
-              </span>
-              <span className="flex-1 text-left">
-                Continúa con Facebook
-              </span>
-            </button>
-          )}
-        </div>
+          {import.meta.env.VITE_GITHUB_PROVIDER_ENABLED === "true" && (
+  <button
+    type="button"
+    onClick={handleGithub}
+    className="h-11 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm flex items-center gap-3 hover:border-sky-500"
+  >
+    <span className="h-7 w-7 rounded-full bg-slate-800 grid place-items-center text-xs font-bold">
+      GH
+    </span>
+    <span className="flex-1 text-left">
+      Continúa con GitHub
+    </span>
+  </button>
+)}
+
+      </div>
 
         <div className="flex flex-col gap-2 text-sm text-slate-400">
           <div>
