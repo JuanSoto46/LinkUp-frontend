@@ -53,7 +53,7 @@ export default function Login() {
       // TO DO:
       // Add a cape to search if the user is alredy registered, avoiding doing this process everytime
       await api.createOAuthProfile({userProfile: {uid, displayName, age, email}, provider: "google"});
-      navigate("/profile");
+      navigate("/");
     } catch {
       setError("No se pudo iniciar sesión con Google.");
     }
@@ -71,7 +71,7 @@ export default function Login() {
       }
       const age = null;
       const response = await api.createOAuthProfile({userProfile: {uid, displayName, age, email}, provider: "github"});
-      navigate("/profile");
+      navigate("/");
     } catch (err: any) {
       console.error(err);
 
