@@ -25,7 +25,7 @@ export default function Login() {
 
     try {
       await loginEmail(email, password);
-      navigate("/profile");
+      navigate("/");
     } catch (err: any) {
       let msg = "No se pudo iniciar sesión.";
       if (

@@ -13,7 +13,8 @@ interface UserProfile {
 
 export default function Profile() {
   const navigate = useNavigate();
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [firebaseUser, setFirebaseUser] =
+    useState<FirebaseUser | null>(null);
 
   const [profile, setProfile] = useState<UserProfile>({
     firstName: "",
@@ -47,21 +48,50 @@ export default function Profile() {
       const fbLastName = parts.slice(1).join(" ") || "";
 
       try {
-        // 1) Intento traer del backend
+        // 1) Intentar traer del backend
         const res = await api.getUser(u.uid);
-        const data = res.user || res.data || res;
+const data = (res as any).user || (res as any).data || res;
 
-        setProfile({
-          firstName: data.firstName ?? fbFirstName,
-          lastName: data.lastName ?? fbLastName,
-          age: data.age ?? null,
-          email: data.email ?? u.email ?? "",
-        });
+const rawFirst = (data.firstName ?? "") as string;
+const rawLast = (data.lastName ?? "") as string;
+const rawEmail = (data.email ?? "") as string;
+
+const firstName =
+  rawFirst.trim() !== ""
+    ? rawFirst
+    : fbFirstName || "Usuario";
+
+const lastName =
+  rawLast.trim() !== ""
+    ? rawLast
+    : fbLastName || "";
+
+const email =
+  rawEmail.trim() !== ""
+    ? rawEmail
+    : u.email || "";
+
+setProfile({
+  firstName,
+  lastName,
+  age:
+    typeof data.age === "number"
+      ? data.age
+      : data.age
+      ? Number(data.age)
+      : null,
+  email,
+});
 
         setInfo(null);
       } catch (e: any) {
-        // 2) Si no existe, intento CREARLO con PUT (muchos backends lo soportan)
-        try {
+        console.error("Error cargando perfil:", e);
+
+        const msg = (e?.message || "").toLowerCase();
+        const isNotFound = msg.includes("user not found");
+
+        if (isNotFound) {
+          // 2) Solo si el backend dice "User not found" creamos el perfil
           const newProfile: UserProfile = {
             firstName: fbFirstName || "Usuario",
             lastName: fbLastName || "",
@@ -69,21 +99,31 @@ export default function Profile() {
             email: u.email || "",
           };
 
-          await api.updateUser(u.uid, newProfile);
-
-          setProfile(newProfile);
-          setInfo("Perfil creado automáticamente en el backend.");
-        } catch {
-          // 3) Si no deja crear, muestro fallback sin romper vista
-          setProfile({
-            firstName: fbFirstName,
-            lastName: fbLastName,
+          try {
+            await api.updateUser(u.uid, newProfile);
+            setProfile(newProfile);
+            setInfo(
+              "Perfil creado automáticamente en el servidor. Puedes actualizar tus datos y se mantendrán guardados."
+            );
+          } catch (inner: any) {
+            console.error("Error creando perfil en backend:", inner);
+            setProfile(newProfile);
+            setError(
+              "No se pudo sincronizar tu perfil con el servidor. Tus cambios podrían no guardarse."
+            );
+          }
+        } else {
+          // 3) Para otros errores NO pisamos lo que haya en Firestore
+          const fallbackProfile: UserProfile = {
+            firstName: fbFirstName || "Usuario",
+            lastName: fbLastName || "",
             age: null,
             email: u.email || "",
-          });
+          };
 
-          setInfo(
-            "Tu cuenta existe en Firebase pero no en el backend. Para editar datos debes registrarte manualmente."
+          setProfile(fallbackProfile);
+          setError(
+            "No se pudo cargar tu perfil desde el servidor. Intenta recargar la página o iniciar sesión de nuevo."
           );
         }
       } finally {
@@ -94,7 +134,10 @@ export default function Profile() {
     return () => unsub();
   }, [navigate]);
 
-  function onChange<K extends keyof UserProfile>(key: K, value: UserProfile[K]) {
+  function onChange<K extends keyof UserProfile>(
+    key: K,
+    value: UserProfile[K]
+  ) {
     setProfile((p) => ({ ...p, [key]: value }));
   }
 
@@ -107,10 +150,22 @@ export default function Profile() {
     setSaving(true);
 
     try {
-      await api.updateUser(firebaseUser.uid, profile);
-      setInfo("Perfil actualizado.");
+      await api.updateUser(firebaseUser.uid, {
+        firstName: profile.firstName.trim(),
+        lastName: profile.lastName.trim(),
+        age:
+          profile.age !== null && profile.age !== undefined
+            ? Number(profile.age)
+            : null,
+        email: profile.email.trim(),
+      });
+
+      setInfo("Perfil actualizado correctamente.");
     } catch (e: any) {
-      setError(e.message || "No se pudo actualizar el perfil.");
+      console.error("Error actualizando perfil:", e);
+      setError(
+        e?.message || "No se pudo actualizar el perfil."
+      );
     } finally {
       setSaving(false);
     }
@@ -122,12 +177,16 @@ export default function Profile() {
 
     setDeleting(true);
     setError(null);
+
     try {
       await api.deleteUser(firebaseUser.uid);
       await firebaseUser.delete();
       navigate("/auth/login");
     } catch (e: any) {
-      setError(e.message || "No se pudo eliminar la cuenta.");
+      console.error("Error eliminando cuenta:", e);
+      setError(
+        e?.message || "No se pudo eliminar la cuenta."
+      );
     } finally {
       setDeleting(false);
     }
@@ -143,7 +202,9 @@ export default function Profile() {
 
   return (
     <main className="max-w-xl mx-auto">
-      <h1 className="text-2xl font-semibold text-slate-50 mb-6">Mi perfil</h1>
+      <h1 className="text-2xl font-semibold text-slate-50 mb-6">
+        Mi perfil
+      </h1>
 
       {info && (
         <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200">
@@ -161,23 +222,31 @@ export default function Profile() {
         onSubmit={handleSave}
         className="rounded-2xl border border-slate-800 bg-[#050816] p-6 space-y-4"
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-slate-400">Nombres</label>
+            <label className="text-xs text-slate-400">
+              Nombres
+            </label>
             <input
               className="mt-1 h-11 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
               value={profile.firstName}
-              onChange={(e) => onChange("firstName", e.target.value)}
+              onChange={(e) =>
+                onChange("firstName", e.target.value)
+              }
               required
             />
           </div>
 
           <div>
-            <label className="text-xs text-slate-400">Apellidos</label>
+            <label className="text-xs text-slate-400">
+              Apellidos
+            </label>
             <input
               className="mt-1 h-11 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
               value={profile.lastName}
-              onChange={(e) => onChange("lastName", e.target.value)}
+              onChange={(e) =>
+                onChange("lastName", e.target.value)
+              }
               required
             />
           </div>
@@ -191,18 +260,25 @@ export default function Profile() {
             className="mt-1 h-11 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
             value={profile.age ?? ""}
             onChange={(e) =>
-              onChange("age", e.target.value ? Number(e.target.value) : null)
+              onChange(
+                "age",
+                e.target.value ? Number(e.target.value) : null
+              )
             }
           />
         </div>
 
         <div>
-          <label className="text-xs text-slate-400">Correo</label>
+          <label className="text-xs text-slate-400">
+            Correo
+          </label>
           <input
             type="email"
             className="mt-1 h-11 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
             value={profile.email}
-            onChange={(e) => onChange("email", e.target.value)}
+            onChange={(e) =>
+              onChange("email", e.target.value)
+            }
             required
           />
         </div>
