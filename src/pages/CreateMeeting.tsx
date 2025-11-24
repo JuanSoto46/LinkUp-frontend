@@ -40,17 +40,17 @@ export default function CreateMeeting() {
       if (response.success) {
         setSuccess(true);
         setMeetingId(response.meeting?.id);
-        
-        // Reset form
         setForm({
           title: "",
           scheduledAt: "",
           description: ""
+        
         });
+
 
         // Auto-redirect after success
         setTimeout(() => {
-          navigate("/");
+          navigate("/meetings");
         }, 3000);
       } else {
         setError(response.error || "Error al crear la reunión");

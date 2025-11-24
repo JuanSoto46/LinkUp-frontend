@@ -8,50 +8,35 @@ async function authedFetch(path: string, options: RequestInit = {}) {
   const { getIdToken } = await import("./firebase");
   const token = await getIdToken();
 
-  if (!token) {
-    // Frontend-level guard: caller should handle this as "session expired"
-    throw new Error("AUTH_REQUIRED");
-  }
+  if (!token) throw new Error("AUTH_REQUIRED");
 
   const headers = new Headers(options.headers || {});
   headers.set("Content-Type", "application/json");
   headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API}${path}`, { ...options, headers });
-  const text = await res.text();
+  const res = await fetch(`${API}${path}`, {
+    ...options,
+    headers,
+  });
+
+  const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    // Backend usually sends JSON with { success, error }
-    throw new Error(text || "API_ERROR");
+    const msg =
+      data?.error ||
+      data?.message ||
+      "Error inesperado en el servidor";
+    throw new Error(msg);
   }
 
-  return text ? JSON.parse(text) : null;
+  return data;
 }
 
 export const api = {
-  getUser: (uid: string) => authedFetch(`/api/users/${uid}`),
-
-  updateUser: (uid: string, payload: any) =>
-    authedFetch(`/api/users/${uid}`, {
-      method: "PUT",
-      body: JSON.stringify(payload),
-    }),
-
-  deleteUser: (uid: string) =>
-    authedFetch(`/api/users/${uid}`, { method: "DELETE" }),
-
-  createMeeting: (payload: {
-    title: string;
-    scheduledAt?: string;
-    description?: string;
-  }) =>
-    authedFetch(`/api/meetings`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-
-  // This one does NOT need auth header (registration)
-  registerProfile: (payload: {
+  /**
+   * Register user profile (NO auth yet)
+   */
+  registerProfile: (profile: {
     firstName: string;
     lastName: string;
     age: number;
@@ -61,9 +46,63 @@ export const api = {
     fetch(`${API}/api/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(profile),
     }).then(async (r) => {
-      if (!r.ok) throw new Error(await r.text());
-      return r.json();
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        throw new Error(
+          data?.error || data?.message || (await r.text())
+        );
+      }
+      return data;
     }),
+
+  /**
+   * Get user profile by uid
+   */
+  getUser: (uid: string) =>
+    authedFetch(`/api/users/${uid}`, { method: "GET" }),
+
+  /**
+   * Update user profile by uid
+   */
+  updateUser: (
+    uid: string,
+    profile: {
+      firstName?: string;
+      lastName?: string;
+      age?: number | null;
+      email?: string;
+      password?: string;
+    }
+  ) =>
+    authedFetch(`/api/users/${uid}`, {
+      method: "PUT",
+      body: JSON.stringify(profile),
+    }),
+
+  /**
+   * Delete user
+   */
+  deleteUser: (uid: string) =>
+    authedFetch(`/api/users/${uid}`, { method: "DELETE" }),
+
+  /**
+   * Create a meeting
+   */
+  createMeeting: (meeting: {
+    title: string;
+    scheduledAt?: string;
+    description?: string;
+  }) =>
+    authedFetch(`/api/meetings`, {
+      method: "POST",
+      body: JSON.stringify(meeting),
+    }),
+
+  /**
+   * ✅ List meetings for current user
+   */
+  getMeetings: () =>
+    authedFetch(`/api/meetings`, { method: "GET" }),
 };
