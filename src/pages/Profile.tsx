@@ -50,34 +50,82 @@ export default function Profile() {
       try {
         // 1) Intentar traer del backend
         const res = await api.getUser(u.uid);
-        const data = (res as any).user || (res as any).data || res;
+const data = (res as any).user || (res as any).data || res;
 
-        setProfile({
-          firstName: data.firstName ?? fbFirstName,
-          lastName: data.lastName ?? fbLastName,
-          age:
-            typeof data.age === "number"
-              ? data.age
-              : data.age
-              ? Number(data.age)
-              : null,
-          email: data.email ?? u.email ?? "",
-        });
+const rawFirst = (data.firstName ?? "") as string;
+const rawLast = (data.lastName ?? "") as string;
+const rawEmail = (data.email ?? "") as string;
+
+const firstName =
+  rawFirst.trim() !== ""
+    ? rawFirst
+    : fbFirstName || "Usuario";
+
+const lastName =
+  rawLast.trim() !== ""
+    ? rawLast
+    : fbLastName || "";
+
+const email =
+  rawEmail.trim() !== ""
+    ? rawEmail
+    : u.email || "";
+
+setProfile({
+  firstName,
+  lastName,
+  age:
+    typeof data.age === "number"
+      ? data.age
+      : data.age
+      ? Number(data.age)
+      : null,
+  email,
+});
+
         setInfo(null);
       } catch (e: any) {
         console.error("Error cargando perfil:", e);
 
-        // 2) Si no existe en backend, usar datos de Firebase como base
-        setProfile({
-          firstName: fbFirstName || "Usuario",
-          lastName: fbLastName || "",
-          age: null,
-          email: u.email || "",
-        });
+        const msg = (e?.message || "").toLowerCase();
+        const isNotFound = msg.includes("user not found");
 
-        setInfo(
-          "Aún no tienes perfil completo en la plataforma. Completa tus datos y guarda los cambios."
-        );
+        if (isNotFound) {
+          // 2) Solo si el backend dice "User not found" creamos el perfil
+          const newProfile: UserProfile = {
+            firstName: fbFirstName || "Usuario",
+            lastName: fbLastName || "",
+            age: null,
+            email: u.email || "",
+          };
+
+          try {
+            await api.updateUser(u.uid, newProfile);
+            setProfile(newProfile);
+            setInfo(
+              "Perfil creado automáticamente en el servidor. Puedes actualizar tus datos y se mantendrán guardados."
+            );
+          } catch (inner: any) {
+            console.error("Error creando perfil en backend:", inner);
+            setProfile(newProfile);
+            setError(
+              "No se pudo sincronizar tu perfil con el servidor. Tus cambios podrían no guardarse."
+            );
+          }
+        } else {
+          // 3) Para otros errores NO pisamos lo que haya en Firestore
+          const fallbackProfile: UserProfile = {
+            firstName: fbFirstName || "Usuario",
+            lastName: fbLastName || "",
+            age: null,
+            email: u.email || "",
+          };
+
+          setProfile(fallbackProfile);
+          setError(
+            "No se pudo cargar tu perfil desde el servidor. Intenta recargar la página o iniciar sesión de nuevo."
+          );
+        }
       } finally {
         setLoading(false);
       }
