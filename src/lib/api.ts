@@ -129,4 +129,19 @@ export const api = {
     authedFetch(`/api/meetings/${id}`, {
       method: "DELETE",
     }),
+  
+  // Create profile for OAuth users (after first login)
+  createOAuthProfile: (payload: {
+    userProfile: {
+      displayName: string | null; 
+      age: number | null;
+      email: string | null;
+      uid: string;
+    }
+    provider: string;
+  }) =>
+    authedFetch(`/api/oauth/${payload.provider}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };
