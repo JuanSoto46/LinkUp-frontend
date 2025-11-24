@@ -64,7 +64,8 @@ export default function Login() {
     try {
       const login = await loginGithub();
       const {uid, displayName , email} = login.user;
-      if (!uid || !displayName) {
+      // We only check uid bcs sometimes Github doesn't retrieve information about user's name or email.
+      if (!uid ) {
         setError("No se pudo iniciar sesión con Github.");
         return;
       }
