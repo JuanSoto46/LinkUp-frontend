@@ -23,8 +23,8 @@ async function authedFetch(path: string, options: RequestInit = {}) {
 
   if (!res.ok) {
     const msg =
-      data?.error ||
-      data?.message ||
+      (data as any)?.error ||
+      (data as any)?.message ||
       "Error inesperado en el servidor";
     throw new Error(msg);
   }
@@ -51,7 +51,7 @@ export const api = {
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
         throw new Error(
-          data?.error || data?.message || (await r.text())
+          (data as any)?.error || (data as any)?.message || (await r.text())
         );
       }
       return data;
@@ -101,8 +101,32 @@ export const api = {
     }),
 
   /**
-   * ✅ List meetings for current user
+   * List meetings for current user
    */
   getMeetings: () =>
     authedFetch(`/api/meetings`, { method: "GET" }),
+
+  /**
+   * Update a meeting (title, description, scheduledAt)
+   */
+  updateMeeting: (
+    id: string,
+    meeting: {
+      title?: string;
+      description?: string;
+      scheduledAt?: string | null;
+    }
+  ) =>
+    authedFetch(`/api/meetings/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(meeting),
+    }),
+
+  /**
+   * Delete / cancel a meeting
+   */
+  deleteMeeting: (id: string) =>
+    authedFetch(`/api/meetings/${id}`, {
+      method: "DELETE",
+    }),
 };
