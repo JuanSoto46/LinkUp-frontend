@@ -5,6 +5,7 @@ import {
   loginGoogle,
   loginGithub
 } from "../../lib/firebase";
+import { api } from "../../lib/api";
 
 /**
  * Login screen: email + providers.
@@ -42,7 +43,16 @@ export default function Login() {
   async function handleGoogle() {
     setError(null);
     try {
-      await loginGoogle();
+      const login = await loginGoogle();
+      const {uid, displayName , email} = login.user;
+      if (!email || !uid || !displayName) {
+        setError("No se pudo iniciar sesión con Google.");
+        return;
+      }
+      const age = null;
+      // TO DO:
+      // Add a cape to search if the user is alredy registered, avoiding doing this process everytime
+      await api.createOAuthProfile({userProfile: {uid, displayName, age, email}, provider: "google"});
       navigate("/profile");
     } catch {
       setError("No se pudo iniciar sesión con Google.");
@@ -52,7 +62,14 @@ export default function Login() {
      async function handleGithub() {
     setError(null);
     try {
-      await loginGithub();
+      const login = await loginGithub();
+      const {uid, displayName , email} = login.user;
+      if (!uid || !displayName) {
+        setError("No se pudo iniciar sesión con Github.");
+        return;
+      }
+      const age = null;
+      const response = await api.createOAuthProfile({userProfile: {uid, displayName, age, email}, provider: "github"});
       navigate("/profile");
     } catch (err: any) {
       console.error(err);
