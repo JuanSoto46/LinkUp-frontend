@@ -38,6 +38,7 @@ function formatDateTime(value?: string | null): string {
  * - navigate to join or create a meeting
  *
  * It relies on the backend API exposed in ../lib/api.
+ * Includes UX improvements for slow cold-start backends.
  */
 export default function Meetings() {
   const navigate = useNavigate();
@@ -53,13 +54,23 @@ export default function Meetings() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // UX flags
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [isSlowLoading, setIsSlowLoading] = useState(false);
+
   /**
    * Fetches the meetings from the backend and updates local state.
-   * Handles loading and error states.
+   * Handles loading, error states and differentiates first load vs refresh.
+   *
+   * @param showFullLoader - If true, show full-page loader.
    */
-  async function loadMeetings() {
-    setLoading(true);
+  async function loadMeetings(showFullLoader: boolean = false) {
+    if (showFullLoader) {
+      setLoading(true);
+      setIsSlowLoading(false);
+    }
     setError(null);
+
     try {
       const res = await api.getMeetings();
       // Backend most likely returns a plain array,
@@ -72,12 +83,27 @@ export default function Meetings() {
       setError(e.message || "No se pudieron cargar tus reuniones.");
     } finally {
       setLoading(false);
+      setIsInitialLoad(false);
+      setIsSlowLoading(false);
     }
   }
 
   useEffect(() => {
-    loadMeetings();
+    // First load: show full loader
+    loadMeetings(true);
   }, []);
+
+  useEffect(() => {
+    // If backend is slow (Render waking up), show a nicer hint
+    if (loading) {
+      const t = setTimeout(() => {
+        setIsSlowLoading(true);
+      }, 3000); // 3s threshold to consider it "slow"
+      return () => clearTimeout(t);
+    } else {
+      setIsSlowLoading(false);
+    }
+  }, [loading]);
 
   /**
    * Starts editing mode for a given meeting and
@@ -95,9 +121,7 @@ export default function Meetings() {
       if (!Number.isNaN(d.getTime())) {
         // Convert ISO to a value compatible with datetime-local
         const pad = (n: number) => String(n).padStart(2, "0");
-        const local = new Date(
-          d.getTime() - d.getTimezoneOffset() * 60000
-        );
+        const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
         const y = local.getFullYear();
         const m = pad(local.getMonth() + 1);
         const day = pad(local.getDate());
@@ -151,9 +175,7 @@ export default function Meetings() {
 
       const updated = (await api.updateMeeting(id, payload)) as Meeting;
 
-      setMeetings((prev) =>
-        prev.map((m) => (m.id === id ? updated : m))
-      );
+      setMeetings((prev) => prev.map((m) => (m.id === id ? updated : m)));
       cancelEdit();
     } catch (e: any) {
       console.error(e);
@@ -226,34 +248,58 @@ export default function Meetings() {
         </div>
       </div>
 
-      {loading && (
+      {/* Initial full loader */}
+      {isInitialLoad && loading && (
         <div className="rounded-2xl border border-slate-800 bg-[#050816] p-6 text-sm text-slate-300 animate-pulse">
           Cargando reuniones...
+          {isSlowLoading && (
+            <p className="mt-2 text-xs text-slate-400">
+              El servidor está despertando, esto puede tardar unos
+              segundos.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Subsequent background refresh indicator */}
+      {!isInitialLoad && loading && (
+        <div className="mb-3 text-xs text-slate-400">
+          Actualizando reuniones...
         </div>
       )}
 
       {error && (
-        <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-6 text-sm text-red-200">
+        <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-6 text-sm text-red-200 mt-3">
           {error}
-          <div className="mt-3">
+          <div className="mt-3 flex items-center gap-3">
             <button
-              onClick={loadMeetings}
+              onClick={() => loadMeetings(true)}
               className="text-xs px-3 py-1.5 rounded-full border border-red-400/60 hover:bg-red-500/10"
             >
               Reintentar
             </button>
+            {!loading && (
+              <button
+                onClick={() => loadMeetings(false)}
+                className="text-xs px-3 py-1.5 rounded-full border border-slate-500/60 text-red-100 hover:bg-slate-900/40"
+              >
+                Reintentar en segundo plano
+              </button>
+            )}
           </div>
         </div>
       )}
 
       {!loading && !error && meetings.length === 0 && (
-        <div className="rounded-2xl border border-slate-800 bg-[#050816] p-6 text-sm text-slate-300">
-          Aún no tienes reuniones. Crea la primera con el botón de arriba.
+        <div className="rounded-2xl border border-slate-800 bg-[#050816] p-6 text-sm text-slate-300 mt-3">
+          Aún no tienes reuniones. Crea la primera con el botón de
+          arriba.
         </div>
       )}
 
-      {!loading && !error && meetings.length > 0 && (
-        <div className="grid gap-4">
+      {/* Show list even if we are doing a background refresh */}
+      {!error && meetings.length > 0 && (
+        <div className="grid gap-4 mt-3">
           {meetings.map((m) => {
             const isEditing = editingId === m.id;
 
@@ -268,9 +314,7 @@ export default function Meetings() {
                       <span className="font-semibold">
                         ID de reunión:
                       </span>{" "}
-                      <span className="font-mono">
-                        {m.id}
-                      </span>
+                      <span className="font-mono">{m.id}</span>
                     </p>
 
                     <label className="grid gap-1">
@@ -278,9 +322,7 @@ export default function Meetings() {
                       <input
                         className="h-10 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
                         value={editTitle}
-                        onChange={(e) =>
-                          setEditTitle(e.target.value)
-                        }
+                        onChange={(e) => setEditTitle(e.target.value)}
                         required
                       />
                     </label>
@@ -325,9 +367,7 @@ export default function Meetings() {
                       <span className="font-semibold">
                         ID de reunión:
                       </span>{" "}
-                      <span className="font-mono">
-                        {m.id}
-                      </span>
+                      <span className="font-mono">{m.id}</span>
                     </p>
 
                     {m.description && (
