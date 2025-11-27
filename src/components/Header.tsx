@@ -3,8 +3,13 @@ import { auth, logout } from "../lib/firebase";
 import { useEffect, useState } from "react";
 
 /**
- * Header component with navigation and user auth state
- * Implements usability heuristic: Visibility of system status
+ * Main application header component.
+ *
+ * It:
+ * - Shows the brand logo
+ * - Adapts to auth state (public vs dashboard)
+ * - Hides itself on the /call full-screen layout
+ * - Provides a responsive mobile navigation with a hamburger button
  */
 export default function Header() {
   const [user, setUser] = useState(auth.currentUser);
@@ -24,10 +29,10 @@ export default function Header() {
   const displayName = user?.displayName || user?.email || "Usuario";
 
   /**
-   * Regla:
-   * - SIN usuario: header completo (nav, botones, etc.).
-   * - CON usuario en rutas normales: vista compacta en escritorio (solo logo).
-   * - EN LLAMADA: logo + header propio de /call, sin menú extra.
+   * Rules:
+   * - Without user: full header (nav, buttons, etc.).
+   * - With user in normal routes: compact header in desktop (only logo).
+   * - In call route: logo + own Call header, no extra menu.
    */
   const isCompactHeader = !!user && !isCallRoute;
   const isCallHeader = !!user && isCallRoute;
@@ -42,11 +47,14 @@ export default function Header() {
     }
   };
 
+  const hamburgerLineBase =
+    "block w-5 h-0.5 rounded-full bg-slate-100 transition-transform transition-opacity duration-200";
+
   return (
     <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm">
       <nav
         className="
-          max-w-6xl mx-auto px-4 py-4
+          max-w-6xl mx-auto px-4 py-3
           flex items-center justify-between
           gap-4 sm:gap-6
         "
@@ -65,7 +73,7 @@ export default function Header() {
           </span>
         </Link>
 
-        {/* NAV ESCRITORIO: solo cuando no está compacto y no es /call */}
+        {/* Desktop nav: only when not compact and not /call */}
         {!isCompactHeader && !isCallHeader && (
           <div className="hidden md:flex items-center gap-6 text-sm text-slate-200 ml-auto">
             {!isAuthRoute && (
@@ -109,7 +117,7 @@ export default function Header() {
               )
             ) : (
               <>
-                {/* Sesión iniciada - desktop (solo cuando no es compacto) */}
+                {/* Logged user info - desktop (only when not compact) */}
                 <div className="hidden lg:flex flex-col items-end text-xs text-slate-300 max-w-[220px]">
                   <span>Sesión iniciada como</span>
                   <span className="text-slate-50 truncate">
@@ -127,22 +135,43 @@ export default function Header() {
           </div>
         )}
 
-        {/* BOTÓN HAMBURGUESA: siempre en móvil, salvo en /call */}
+        {/* Mobile hamburger button: always on mobile, except on /call */}
         {!isCallHeader && (
           <button
-            className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-xl hover:bg-slate-900 text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 ml-auto"
+            className="
+              md:hidden inline-flex items-center justify-center
+              w-10 h-10 rounded-full
+              border border-slate-700
+              bg-slate-900/70
+              hover:bg-slate-900
+              text-slate-200
+              focus:outline-none focus:ring-2 focus:ring-sky-500
+              ml-auto
+            "
             onClick={() => setIsMenuOpen((v) => !v)}
-            aria-label="Toggle menu"
+            aria-label={isMenuOpen ? "Close menu" : "Open menu"}
             aria-expanded={isMenuOpen}
           >
-            <span className="block w-5 h-0.5 bg-slate-100 mb-1.5" />
-            <span className="block w-5 h-0.5 bg-slate-100 mb-1.5" />
-            <span className="block w-5 h-0.5 bg-slate-100" />
+            <span
+              className={`${hamburgerLineBase} ${
+                isMenuOpen ? "translate-y-1.5 rotate-45" : ""
+              }`}
+            />
+            <span
+              className={`${hamburgerLineBase} ${
+                isMenuOpen ? "opacity-0" : "mt-1.5 mb-1.5"
+              }`}
+            />
+            <span
+              className={`${hamburgerLineBase} ${
+                isMenuOpen ? "-translate-y-1.5 -rotate-45" : ""
+              }`}
+            />
           </button>
         )}
       </nav>
 
-      {/* MENÚ MÓVIL */}
+      {/* Mobile menu */}
       {!isCallHeader && isMenuOpen && (
         <div className="md:hidden border-t border-slate-800 bg-slate-950">
           <div className="mx-auto max-w-6xl px-4 py-4 flex flex-col gap-3 text-sm">
@@ -150,7 +179,7 @@ export default function Header() {
               <>
                 {user ? (
                   <>
-                    {/* Menú tipo dashboard en móvil cuando hay usuario */}
+                    {/* Dashboard-like mobile menu when user is logged in */}
                     <button
                       onClick={() => {
                         navigate("/meetings");
@@ -206,7 +235,7 @@ export default function Header() {
                   </>
                 ) : (
                   <>
-                    {/* Menú público cuando NO hay usuario */}
+                    {/* Public menu when user is not logged in */}
                     <Link
                       to="/"
                       onClick={() => setIsMenuOpen(false)}
