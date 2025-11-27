@@ -22,6 +22,10 @@ import ChangePassword from "./pages/auth/ChangePassword";
 
 /**
  * Simple auth gate for protected routes.
+ *
+ * Wraps children and only renders them if there is
+ * an authenticated Firebase user. Otherwise redirects
+ * to the login page.
  */
 function RequireAuth({ children }: { children: JSX.Element }) {
   const [user, setUser] = useState<FirebaseUser | null>(auth.currentUser);
@@ -48,100 +52,127 @@ function RequireAuth({ children }: { children: JSX.Element }) {
   return children;
 }
 
+/**
+ * Default application layout used for all routes
+ * except the full-screen call experience.
+ *
+ * Includes:
+ * - Global header
+ * - Main content container with max width
+ * - Global footer
+ */
+function MainAppLayout() {
+  return (
+    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-50">
+      <Header />
+
+      <main id="main" className="flex-1">
+        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:py-10">
+          <Routes>
+            {/* Public */}
+            <Route path="/" element={<Home />} />
+            <Route path="/about" element={<About />} />
+
+            {/* Auth */}
+            <Route path="/auth/login" element={<Login />} />
+            <Route path="/auth/register" element={<Register />} />
+            <Route path="/auth/reset" element={<ResetPassword />} />
+            <Route
+              path="/auth/change-password"
+              element={
+                <RequireAuth>
+                  <DashboardLayout>
+                    <ChangePassword />
+                  </DashboardLayout>
+                </RequireAuth>
+              }
+            />
+
+            {/* Protected dashboard pages */}
+            <Route
+              path="/meetings"
+              element={
+                <RequireAuth>
+                  <DashboardLayout>
+                    <Meetings />
+                  </DashboardLayout>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/create-meeting"
+              element={
+                <RequireAuth>
+                  <DashboardLayout>
+                    <CreateMeeting />
+                  </DashboardLayout>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/join-meeting"
+              element={
+                <RequireAuth>
+                  <DashboardLayout>
+                    <JoinMeeting />
+                  </DashboardLayout>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <RequireAuth>
+                  <DashboardLayout>
+                    <Profile />
+                  </DashboardLayout>
+                </RequireAuth>
+              }
+            />
+
+            {/* Fallback inside main layout */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}
+
+/**
+ * Root application component.
+ *
+ * It:
+ * - Sets up the router
+ * - Provides a global skip-link for accessibility
+ * - Splits the app into:
+ *   - A full-screen call route (`/call`)
+ *   - The standard layout for the rest of the pages
+ */
 export default function App() {
   return (
     <BrowserRouter>
-      {/* Skip link for accessibility */}
+      {/* Global skip link for accessibility */}
       <a href="#main" className="skip-link">
         Saltar al contenido principal
       </a>
 
-      <div className="min-h-screen flex flex-col bg-slate-950 text-slate-50">
-        <Header />
+      <Routes>
+        {/* ✅ Full-screen call: no Header, no Footer, no max-width container */}
+        <Route
+          path="/call"
+          element={
+            <RequireAuth>
+              <Call />
+            </RequireAuth>
+          }
+        />
 
-        <main id="main" className="flex-1">
-          <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:py-10">
-            <Routes>
-              {/* Public */}
-              <Route path="/" element={<Home />} />
-              <Route path="/about" element={<About />} />
-
-              {/* Auth */}
-              <Route path="/auth/login" element={<Login />} />
-              <Route path="/auth/register" element={<Register />} />
-              <Route path="/auth/reset" element={<ResetPassword />} />
-              <Route
-                path="/auth/change-password"
-                element={
-                  <RequireAuth>
-                    <DashboardLayout>
-                      <ChangePassword />
-                    </DashboardLayout>
-                  </RequireAuth>
-                }
-              />
-
-              {/* Protected dashboard pages */}
-              <Route
-                path="/meetings"
-                element={
-                  <RequireAuth>
-                    <DashboardLayout>
-                      <Meetings />
-                    </DashboardLayout>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/create-meeting"
-                element={
-                  <RequireAuth>
-                    <DashboardLayout>
-                      <CreateMeeting />
-                    </DashboardLayout>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/join-meeting"
-                element={
-                  <RequireAuth>
-                    <DashboardLayout>
-                      <JoinMeeting />
-                    </DashboardLayout>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/profile"
-                element={
-                  <RequireAuth>
-                    <DashboardLayout>
-                      <Profile />
-                    </DashboardLayout>
-                  </RequireAuth>
-                }
-              />
-              
-              {/* ✅ Call page sin DashboardLayout para pantalla completa */}
-              <Route
-                path="/call"
-                element={
-                  <RequireAuth>
-                    {/* ✅ Envolver en fragmento */}
-                    <Call />
-                  </RequireAuth>
-                }
-              />
-
-              {/* Fallback */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </div>
-        </main>
-
-        <Footer />
-      </div>
+        {/* ✅ Everything else uses the standard layout */}
+        <Route path="/*" element={<MainAppLayout />} />
+      </Routes>
     </BrowserRouter>
   );
 }
