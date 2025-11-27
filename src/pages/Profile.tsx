@@ -11,6 +11,15 @@ interface UserProfile {
   email: string;
 }
 
+/**
+ * Profile page component.
+ * 
+ * Responsibilities:
+ * - Sync user profile between Firebase Auth and backend API.
+ * - Allow user to update basic profile fields.
+ * - Allow user to delete their account.
+ * - Show better UX feedback when backend is slow (cold start).
+ */
 export default function Profile() {
   const navigate = useNavigate();
   const [firebaseUser, setFirebaseUser] =
@@ -30,7 +39,15 @@ export default function Profile() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
+  // UX flags to improve perceived performance
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [isSlowLoading, setIsSlowLoading] = useState(false);
+
   useEffect(() => {
+    /**
+     * Listen for Firebase Auth state changes and
+     * load or create the user profile in backend.
+     */
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (!u) {
         navigate("/auth/login");
@@ -48,40 +65,40 @@ export default function Profile() {
       const fbLastName = parts.slice(1).join(" ") || "";
 
       try {
-        // 1) Intentar traer del backend
+        // 1) Try to get from backend
         const res = await api.getUser(u.uid);
-const data = (res as any).user || (res as any).data || res;
+        const data = (res as any).user || (res as any).data || res;
 
-const rawFirst = (data.firstName ?? "") as string;
-const rawLast = (data.lastName ?? "") as string;
-const rawEmail = (data.email ?? "") as string;
+        const rawFirst = (data.firstName ?? "") as string;
+        const rawLast = (data.lastName ?? "") as string;
+        const rawEmail = (data.email ?? "") as string;
 
-const firstName =
-  rawFirst.trim() !== ""
-    ? rawFirst
-    : fbFirstName || "Usuario";
+        const firstName =
+          rawFirst.trim() !== ""
+            ? rawFirst
+            : fbFirstName || "Usuario";
 
-const lastName =
-  rawLast.trim() !== ""
-    ? rawLast
-    : fbLastName || "";
+        const lastName =
+          rawLast.trim() !== ""
+            ? rawLast
+            : fbLastName || "";
 
-const email =
-  rawEmail.trim() !== ""
-    ? rawEmail
-    : u.email || "";
+        const email =
+          rawEmail.trim() !== ""
+            ? rawEmail
+            : u.email || "";
 
-setProfile({
-  firstName,
-  lastName,
-  age:
-    typeof data.age === "number"
-      ? data.age
-      : data.age
-      ? Number(data.age)
-      : null,
-  email,
-});
+        setProfile({
+          firstName,
+          lastName,
+          age:
+            typeof data.age === "number"
+              ? data.age
+              : data.age
+              ? Number(data.age)
+              : null,
+          email,
+        });
 
         setInfo(null);
       } catch (e: any) {
@@ -91,7 +108,7 @@ setProfile({
         const isNotFound = msg.includes("user not found");
 
         if (isNotFound) {
-          // 2) Solo si el backend dice "User not found" creamos el perfil
+          // 2) Only if backend returns "User not found", create profile
           const newProfile: UserProfile = {
             firstName: fbFirstName || "Usuario",
             lastName: fbLastName || "",
@@ -113,7 +130,7 @@ setProfile({
             );
           }
         } else {
-          // 3) Para otros errores NO pisamos lo que haya en Firestore
+          // 3) For other errors, keep a local fallback using Firebase data
           const fallbackProfile: UserProfile = {
             firstName: fbFirstName || "Usuario",
             lastName: fbLastName || "",
@@ -128,12 +145,35 @@ setProfile({
         }
       } finally {
         setLoading(false);
+        setIsInitialLoad(false);
+        setIsSlowLoading(false);
       }
     });
 
     return () => unsub();
   }, [navigate]);
 
+  /**
+   * Slow-loading hint when backend takes too long
+   * (typical cold-start behaviour in free hosting).
+   */
+  useEffect(() => {
+    if (loading) {
+      const timer = setTimeout(() => {
+        setIsSlowLoading(true);
+      }, 3000); // 3s threshold to consider it "slow"
+      return () => clearTimeout(timer);
+    } else {
+      setIsSlowLoading(false);
+    }
+  }, [loading]);
+
+  /**
+   * Local profile state updater for controlled inputs.
+   *
+   * @param key Field to update.
+   * @param value New value for the field.
+   */
   function onChange<K extends keyof UserProfile>(
     key: K,
     value: UserProfile[K]
@@ -141,6 +181,9 @@ setProfile({
     setProfile((p) => ({ ...p, [key]: value }));
   }
 
+  /**
+   * Handle profile submit and send updated data to backend.
+   */
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!firebaseUser) return;
@@ -171,6 +214,12 @@ setProfile({
     }
   }
 
+  /**
+   * Handle account deletion:
+   * - removes user from backend
+   * - removes Firebase Auth account
+   * - redirects to login page
+   */
   async function handleDelete() {
     if (!firebaseUser) return;
     if (!confirm("¿Seguro que quieres eliminar tu cuenta?")) return;
@@ -192,10 +241,15 @@ setProfile({
     }
   }
 
-  if (loading) {
+  if (loading && isInitialLoad) {
     return (
       <div className="rounded-2xl border border-slate-800 bg-[#050816] p-6 text-sm text-slate-300 animate-pulse">
         Cargando perfil...
+        {isSlowLoading && (
+          <p className="mt-2 text-xs text-slate-400">
+            El servidor está despertando, esto puede tardar unos segundos.
+          </p>
+        )}
       </div>
     );
   }
@@ -205,6 +259,13 @@ setProfile({
       <h1 className="text-2xl font-semibold text-slate-50 mb-6">
         Mi perfil
       </h1>
+
+      {/* Background refresh hint */}
+      {!isInitialLoad && loading && (
+        <div className="mb-3 text-xs text-slate-400">
+          Actualizando información de perfil...
+        </div>
+      )}
 
       {info && (
         <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200">
