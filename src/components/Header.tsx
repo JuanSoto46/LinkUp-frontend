@@ -37,6 +37,20 @@ export default function Header() {
   const isCompactHeader = !!user && !isCallRoute;
   const isCallHeader = !!user && isCallRoute;
 
+  /** User is inside dashboard-like routes */
+  const isDashboardRoute =
+    !!user &&
+    [
+      "/meetings",
+      "/profile",
+      "/auth/change-password",
+      "/create-meeting",
+      "/join-meeting",
+    ].some((path) => location.pathname.startsWith(path));
+
+  /** When true, header should NOT show its mobile menu (DashboardLayout owns it) */
+  const hideMobileMenu = isDashboardRoute;
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -135,8 +149,11 @@ export default function Header() {
           </div>
         )}
 
-        {/* Mobile hamburger button: always on mobile, except on /call */}
-        {!isCallHeader && (
+        {/* Mobile hamburger button:
+           - hidden on /call
+           - hidden when dashboard owns the menu
+           - hidden on auth routes (login / register) */}
+        {!isCallHeader && !hideMobileMenu && !isAuthRoute && (
           <button
             className="
               md:hidden inline-flex items-center justify-center
@@ -171,101 +188,96 @@ export default function Header() {
         )}
       </nav>
 
-      {/* Mobile menu */}
-      {!isCallHeader && isMenuOpen && (
+      {/* Mobile menu:
+         - disabled on /call
+         - disabled when dashboard owns navigation
+         - disabled on auth routes */}
+      {!isCallHeader && !hideMobileMenu && !isAuthRoute && isMenuOpen && (
         <div className="md:hidden border-t border-slate-800 bg-slate-950">
           <div className="mx-auto max-w-6xl px-4 py-4 flex flex-col gap-3 text-sm">
-            {!isAuthRoute && (
+            {user ? (
               <>
-                {user ? (
-                  <>
-                    {/* Dashboard-like mobile menu when user is logged in */}
-                    <button
-                      onClick={() => {
-                        navigate("/meetings");
-                        setIsMenuOpen(false);
-                      }}
-                      className={`px-2 py-1 rounded-lg text-left ${
-                        isActive("/meetings")
-                          ? "text-sky-400"
-                          : "hover:text-sky-400"
-                      }`}
-                    >
-                      Mis reuniones
-                    </button>
-                    <button
-                      onClick={() => {
-                        navigate("/profile");
-                        setIsMenuOpen(false);
-                      }}
-                      className={`px-2 py-1 rounded-lg text-left ${
-                        isActive("/profile")
-                          ? "text-sky-400"
-                          : "hover:text-sky-400"
-                      }`}
-                    >
-                      Mi perfil
-                    </button>
-                    <button
-                      onClick={() => {
-                        navigate("/auth/change-password");
-                        setIsMenuOpen(false);
-                      }}
-                      className={`px-2 py-1 rounded-lg text-left ${
-                        isActive("/auth/change-password")
-                          ? "text-sky-400"
-                          : "hover:text-sky-400"
-                      }`}
-                    >
-                      Cambiar contraseña
-                    </button>
-                    <button
-                      onClick={() => {
-                        navigate("/about");
-                        setIsMenuOpen(false);
-                      }}
-                      className={`px-2 py-1 rounded-lg text-left ${
-                        isActive("/about")
-                          ? "text-sky-400"
-                          : "hover:text-sky-400"
-                      }`}
-                    >
-                      Sobre nosotros
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {/* Public menu when user is not logged in */}
-                    <Link
-                      to="/"
-                      onClick={() => setIsMenuOpen(false)}
-                      className={`px-2 py-1 rounded-lg ${
-                        isActive("/")
-                          ? "text-sky-400"
-                          : "hover:text-sky-400"
-                      }`}
-                    >
-                      Inicio
-                    </Link>
-
-                    <Link
-                      to="/about"
-                      onClick={() => setIsMenuOpen(false)}
-                      className={`px-2 py-1 rounded-lg ${
-                        isActive("/about")
-                          ? "text-sky-400"
-                          : "hover:text-sky-400"
-                      }`}
-                    >
-                      Sobre nosotros
-                    </Link>
-                  </>
-                )}
+                {/* Dashboard-like mobile menu when user is logged in */}
+                <button
+                  onClick={() => {
+                    navigate("/meetings");
+                    setIsMenuOpen(false);
+                  }}
+                  className={`px-2 py-1 rounded-lg text-left ${
+                    isActive("/meetings")
+                      ? "text-sky-400"
+                      : "hover:text-sky-400"
+                  }`}
+                >
+                  Mis reuniones
+                </button>
+                <button
+                  onClick={() => {
+                    navigate("/profile");
+                    setIsMenuOpen(false);
+                  }}
+                  className={`px-2 py-1 rounded-lg text-left ${
+                    isActive("/profile")
+                      ? "text-sky-400"
+                      : "hover:text-sky-400"
+                  }`}
+                >
+                  Mi perfil
+                </button>
+                <button
+                  onClick={() => {
+                    navigate("/auth/change-password");
+                    setIsMenuOpen(false);
+                  }}
+                  className={`px-2 py-1 rounded-lg text-left ${
+                    isActive("/auth/change-password")
+                      ? "text-sky-400"
+                      : "hover:text-sky-400"
+                  }`}
+                >
+                  Cambiar contraseña
+                </button>
+                <button
+                  onClick={() => {
+                    navigate("/about");
+                    setIsMenuOpen(false);
+                  }}
+                  className={`px-2 py-1 rounded-lg text-left ${
+                    isActive("/about")
+                      ? "text-sky-400"
+                      : "hover:text-sky-400"
+                  }`}
+                >
+                  Sobre nosotros
+                </button>
               </>
-            )}
-
-            {!user && !isAuthRoute && (
+            ) : (
               <>
+                {/* Public menu when user is not logged in */}
+                <Link
+                  to="/"
+                  onClick={() => setIsMenuOpen(false)}
+                  className={`px-2 py-1 rounded-lg ${
+                    isActive("/")
+                      ? "text-sky-400"
+                      : "hover:text-sky-400"
+                  }`}
+                >
+                  Inicio
+                </Link>
+
+                <Link
+                  to="/about"
+                  onClick={() => setIsMenuOpen(false)}
+                  className={`px-2 py-1 rounded-lg ${
+                    isActive("/about")
+                      ? "text-sky-400"
+                      : "hover:text-sky-400"
+                  }`}
+                >
+                  Sobre nosotros
+                </Link>
+
                 <Link
                   to="/auth/login"
                   onClick={() => setIsMenuOpen(false)}

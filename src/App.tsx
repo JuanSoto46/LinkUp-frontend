@@ -20,6 +20,10 @@ import Register from "./pages/auth/Register";
 import ResetPassword from "./pages/auth/ResetPassword";
 import ChangePassword from "./pages/auth/ChangePassword";
 
+// 🔹 NUEVO: contexto y mini llamada
+import { CallUiProvider } from "./context/CallUiContext";
+import { MiniCall } from "./components/MiniCall";
+
 /**
  * Simple auth gate for protected routes.
  *
@@ -153,26 +157,31 @@ function MainAppLayout() {
  */
 export default function App() {
   return (
-    <BrowserRouter>
-      {/* Global skip link for accessibility */}
-      <a href="#main" className="skip-link">
-        Saltar al contenido principal
-      </a>
+    <CallUiProvider>
+      <BrowserRouter>
+        {/* Global skip link for accessibility */}
+        <a href="#main" className="skip-link">
+          Saltar al contenido principal
+        </a>
 
-      <Routes>
-        {/* ✅ Full-screen call: no Header, no Footer, no max-width container */}
-        <Route
-          path="/call"
-          element={
-            <RequireAuth>
-              <Call />
-            </RequireAuth>
-          }
-        />
+        <Routes>
+          {/*  Full-screen call: no Header, no Footer, no max-width container */}
+          <Route
+            path="/call"
+            element={
+              <RequireAuth>
+                <Call />
+              </RequireAuth>
+            }
+          />
 
-        {/* ✅ Everything else uses the standard layout */}
-        <Route path="/*" element={<MainAppLayout />} />
-      </Routes>
-    </BrowserRouter>
+          {/* Everything else uses the standard layout */}
+          <Route path="/*" element={<MainAppLayout />} />
+        </Routes>
+
+        {/* Mini ventana flotante de llamada en curso */}
+        <MiniCall />
+      </BrowserRouter>
+    </CallUiProvider>
   );
 }
