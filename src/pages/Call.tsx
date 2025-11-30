@@ -3,6 +3,8 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { auth } from "../lib/firebase";
 import { api } from "../lib/api";
 import { socketService } from "../lib/socket";
+import { useCallUi } from "../context/CallUiContext";
+
 
 interface Meeting {
   id: string;
@@ -33,11 +35,8 @@ interface ChatMessage {
 
 /**
  * Call page component.
- * Handles the full meeting experience including:
- * - Main call layout
- * - Real-time participants
- * - Live chat
- * The business logic is kept intact; only layout and UX are optimized.
+ * Layout de llamada + participantes + chat.
+ * Solo se toca la vista, no la lógica de negocio.
  */
 export default function Call() {
   const [searchParams] = useSearchParams();
@@ -50,7 +49,6 @@ export default function Call() {
   const meetingId = searchParams.get("meetingId");
   const chatMessagesEndRef = useRef<HTMLDivElement>(null);
 
-  // ✅ Real participants state for the meeting
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -60,13 +58,25 @@ export default function Call() {
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ✅ Mobile chat drawer state (UX only, no logic change)
-  const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
+  // Vista móvil: "call" | "participants" | "chat"
+  const [mobileView, setMobileView] = useState<"call" | "participants" | "chat">(
+    "call"
+  );
 
-  /**
-   * Smoothly scroll the chat panel to the last message
-   * whenever the messages list changes.
-   */
+  // Panel lateral de escritorio
+  const [showParticipantsPanel, setShowParticipantsPanel] = useState(false);
+  const [showChatPanel, setShowChatPanel] = useState(false);
+  const bothPanelsOpen = showParticipantsPanel && showChatPanel;
+
+  // Info de la llamada / enlace compartible
+  const [showCallInfo, setShowCallInfo] = useState(false);
+  const [shareLink, setShareLink] = useState("");
+  
+  const { setActiveCall, setMinimized } = useCallUi();
+
+  const [showEndCallConfirm, setShowEndCallConfirm] = useState(false);
+
+
   const scrollToBottom = () => {
     chatMessagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -75,10 +85,6 @@ export default function Call() {
     scrollToBottom();
   }, [chatMessages]);
 
-  /**
-   * Subscribe to Firebase Auth changes to keep
-   * a fresh reference to the current user.
-   */
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((currentUser) => {
       setUser(currentUser);
@@ -86,9 +92,6 @@ export default function Call() {
     return unsubscribe;
   }, []);
 
-  /**
-   * Load meeting data when there is a meetingId in the URL.
-   */
   useEffect(() => {
     if (meetingId) {
       loadMeetingData();
@@ -98,61 +101,37 @@ export default function Call() {
     }
   }, [meetingId]);
 
-  /**
-   * Once meeting + user + meetingId are available,
-   * initialize the real-time chat socket.
-   */
   useEffect(() => {
     if (meeting && user && meetingId) {
       initializeSocket();
     }
 
     return () => {
-      socketService.disconnect();
+      socketService.removeAllListeners();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meeting, user, meetingId]);
 
-  /**
-   * Initialize the Socket.IO connection and register all real-time listeners.
-   *
-   * Flow:
-   * 1. Connect to chat server.
-   * 2. Clear previous listeners.
-   * 3. Register listeners for messages, user events, typing and errors.
-   * 4. Join the meeting room.
-   *
-   * This order avoids race conditions and ensures the UI
-   * reacts quickly once `meeting_joined` is emitted.
-   */
   const initializeSocket = async () => {
     try {
       console.log("🔄 Initializing socket...");
       setSocketError(null);
 
-      // ✅ Connect FIRST so there is an active socket instance
-      console.log("🔗 Connecting to chat server...");
       await socketService.connect();
-
-      // ✅ Then clean previous listeners (if any)
       socketService.removeAllListeners();
 
-      // ✅ Message listener - avoid duplicates by id
       socketService.onMessage((message: ChatMessage) => {
         console.log("📨 New message received:", message);
         setChatMessages((prev) => {
-          if (prev.some((m) => m.id === message.id)) {
-            return prev;
-          }
+          if (prev.some((m) => m.id === message.id)) return prev;
           return [...prev, message];
         });
       });
 
-      // ✅ User join/leave events
       socketService.onUserEvent((event) => {
         console.log("👤 User event:", event);
 
-        if (event.type === "user_joined") {
+        if (event.type === "user_joined" || event.type === "user_left") {
           if (event.participants) {
             const uniqueParticipants = Array.from(
               new Map(event.participants.map((p: any) => [p.userId, p])).values()
@@ -164,24 +143,10 @@ export default function Call() {
             id: `system-${Date.now()}-${Math.random()}`,
             userId: "system",
             displayName: "Sistema",
-            message: `${event.displayName} se unió a la reunión`,
-            type: "system",
-            timestamp: event.timestamp || new Date().toISOString(),
-          };
-          setChatMessages((prev) => [...prev, systemMessage]);
-        } else if (event.type === "user_left") {
-          if (event.participants) {
-            const uniqueParticipants = Array.from(
-              new Map(event.participants.map((p: any) => [p.userId, p])).values()
-            );
-            setParticipants(uniqueParticipants);
-          }
-
-          const systemMessage: ChatMessage = {
-            id: `system-${Date.now()}-${Math.random()}`,
-            userId: "system",
-            displayName: "Sistema",
-            message: `${event.displayName} salió de la reunión`,
+            message:
+              event.type === "user_joined"
+                ? `${event.displayName} se unió a la reunión`
+                : `${event.displayName} salió de la reunión`,
             type: "system",
             timestamp: event.timestamp || new Date().toISOString(),
           };
@@ -189,22 +154,18 @@ export default function Call() {
         }
       });
 
-      // ✅ Typing start
       socketService.getSocket()?.on(
         "user_typing",
         (data: { userId: string; displayName: string }) => {
           console.log("⌨️ User typing:", data);
           setTypingUsers((prev) => {
             const newSet = new Set(prev);
-            if (data.displayName) {
-              newSet.add(data.displayName);
-            }
+            if (data.displayName) newSet.add(data.displayName);
             return newSet;
           });
         }
       );
 
-      // ✅ Typing stop
       socketService.getSocket()?.on(
         "user_stop_typing",
         (data: { userId: string }) => {
@@ -214,48 +175,50 @@ export default function Call() {
             const userToRemove = participants.find(
               (p) => p.userId === data.userId
             );
-            if (userToRemove) {
-              newSet.delete(userToRemove.displayName);
-            }
+            if (userToRemove) newSet.delete(userToRemove.displayName);
             return newSet;
           });
         }
       );
 
-      // ✅ Socket-level errors
       socketService.onError((error) => {
         console.error("❌ Socket error:", error);
         setSocketError(error.message || "Error de conexión con el chat");
       });
 
-      // ✅ Meeting join confirmation
       socketService.onMeetingJoined((data) => {
-        console.log("✅ Joined meeting:", data);
-        setIsConnected(true);
-        setSocketError(null);
+  console.log("✅ Joined meeting:", data);
+  setIsConnected(true);
+  setSocketError(null);
 
-        if (data.participants) {
-          const uniqueParticipants = Array.from(
-            new Map(data.participants.map((p: any) => [p.userId, p])).values()
-          );
-          setParticipants(uniqueParticipants);
-        }
+  if (data.participants) {
+    const uniqueParticipants = Array.from(
+      new Map(data.participants.map((p: any) => [p.userId, p])).values()
+    );
+    setParticipants(uniqueParticipants);
+  }
 
         const welcomeMessage: ChatMessage = {
-          id: `system-${Date.now()}-${Math.random()}`,
-          userId: "system",
-          displayName: "Sistema",
-          message: `Te has unido a "${data.meetingTitle}"`,
-          type: "system",
-          timestamp: new Date().toISOString(),
-        };
-        setChatMessages([welcomeMessage]);
-      });
+    id: `system-${Date.now()}-${Math.random()}`,
+    userId: "system",
+    displayName: "Sistema",
+    message: `Te has unido a "${data.meetingTitle}"`,
+    type: "system",
+    timestamp: new Date().toISOString(),
+  };
+  setChatMessages([welcomeMessage]);
 
-      console.log("🎯 Joining meeting:", meetingId);
+  setActiveCall({
+    meetingId: meetingId!,
+    title: data.meetingTitle || meeting?.title || "Reunión sin título",
+  });
+  setMinimized(false);
+});
+
+      console.log(" Joining meeting:", meetingId);
       await socketService.joinMeeting(meetingId!);
     } catch (error: any) {
-      console.error("❌ Error initializing socket:", error);
+      console.error(" Error initializing socket:", error);
       setSocketError(
         error.message || "No se pudo conectar al chat en tiempo real"
       );
@@ -263,10 +226,6 @@ export default function Call() {
     }
   };
 
-  /**
-   * Load meeting information from the REST API.
-   * Requires the user to be authenticated.
-   */
   const loadMeetingData = async () => {
     try {
       setLoading(true);
@@ -294,12 +253,6 @@ export default function Call() {
     }
   };
 
-  /**
-   * Build initials for a user display name or email.
-   *
-   * @param name Optional display name override.
-   * @returns Up to two initials.
-   */
   const getUserInitials = (name?: string) => {
     if (!name && !user) return "US";
     const displayName = name || user?.displayName || user?.email || "";
@@ -314,18 +267,12 @@ export default function Call() {
     );
   };
 
-  /**
-   * Handle chat message send action.
-   *
-   * @param e Form event.
-   */
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
 
     try {
       if (socketService.isConnected()) {
-        console.log("📤 Sending message:", newMessage);
         await socketService.sendMessage(newMessage);
         setNewMessage("");
       } else {
@@ -337,10 +284,6 @@ export default function Call() {
     }
   };
 
-  /**
-   * Handle typing indicator with a debounce.
-   * Starts typing state and auto-stops after 3 seconds of inactivity.
-   */
   const handleTyping = () => {
     if (!socketService.isConnected() || !newMessage.trim()) return;
 
@@ -355,9 +298,6 @@ export default function Call() {
     }, 3000);
   };
 
-  /**
-   * Force stop typing indicator when the input loses focus.
-   */
   const handleStopTyping = () => {
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -367,33 +307,18 @@ export default function Call() {
     }
   };
 
-  /**
-   * End the current call and navigate back to the meetings page.
-   */
   const handleEndCall = () => {
-    if (
-      window.confirm("¿Estás seguro de que quieres finalizar la llamada?")
-    ) {
       socketService.disconnect();
+      setActiveCall(null);      
+      setMinimized(false); 
       navigate("/meetings");
-    }
   };
 
-  /**
-   * Retry socket initialization when there is a connection error.
-   */
   const handleRetryConnection = () => {
     setSocketError(null);
-    if (meetingId) {
-      initializeSocket();
-    }
+    if (meetingId) initializeSocket();
   };
 
-  /**
-   * Format a timestamp into a short time string (HH:mm).
-   *
-   * @param timestamp ISO string timestamp.
-   */
   const formatMessageTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString([], {
       hour: "2-digit",
@@ -401,7 +326,41 @@ export default function Call() {
     });
   };
 
-  // ---------- UI STATES ----------
+  const formatDateTime = (iso?: string) => {
+  if (!iso) return "N/D";
+  return new Date(iso).toLocaleString();
+};
+
+const getDisplayMeetingCode = () => {
+  if (!meetingId) return "N/D";
+  const clean = meetingId.replace(/[^a-zA-Z0-9]/g, "");
+  if (clean.length <= 8) return clean.toUpperCase();
+  const short = clean.slice(-8).toUpperCase(); // últimos 8
+  return short.replace(/(.{4})/g, "$1-").replace(/-$/, "");
+};
+
+const handleCopyMeetingCode = async () => {
+  if (!meetingId) return;
+  try {
+    await navigator.clipboard.writeText(meetingId);
+    alert("Código de reunión copiado al portapapeles");
+  } catch (err) {
+    console.error("Error al copiar código", err);
+    alert("No se pudo copiar el código. Copia el texto manualmente.");
+  }
+};
+
+
+  const handleCopyLink = async () => {
+    if (!shareLink) return;
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      alert("Enlace copiado al portapapeles");
+    } catch (err) {
+      console.error("Error al copiar enlace", err);
+      alert("No se pudo copiar el enlace. Copia el texto manualmente.");
+    }
+  };
 
   if (loading) {
     return (
@@ -442,26 +401,24 @@ export default function Call() {
     );
   }
 
-  // ---------- MAIN LAYOUT ----------
-
   return (
     <div className="h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
-      {/* Compact header */}
+      {/* Header */}
       <div className="border-b border-slate-700 bg-slate-900 py-2 px-3 lg:px-4 flex-shrink-0">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex items-center gap-2">
               <div
-                className={`w-6 h-6 rounded-full grid place-items-center ${
+                className={`w-7 h-7 rounded-full grid place-items-center shadow-inner ${
                   isConnected
-                    ? "bg-green-500"
+                    ? "bg-emerald-500"
                     : socketError
                     ? "bg-red-500"
                     : "bg-yellow-500"
                 }`}
               >
                 <svg
-                  className="w-3 h-3 text-white"
+                  className="w-3.5 h-3.5 text-white"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -493,23 +450,46 @@ export default function Call() {
               </div>
             </div>
 
-            <div className="hidden sm:block border-l border-slate-600 h-4" />
+            <div className="hidden sm:block border-l border-slate-600 h-5" />
 
             <div className="hidden sm:block min-w-0">
-              <h1 className="text-sm font-semibold truncate max-w-[220px]">
+              <h1 className="text-sm font-semibold truncate max-w-[260px]">
                 {meeting?.title || "Reunión sin título"}
               </h1>
-              <p className="text-xs text-slate-300">
-                {participants.length} participantes
+              <p className="text-xs text-slate-300 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span>{participants.length} participantes</span>
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Mobile chat toggle */}
+            {/* Botón móvil Participantes */}
             <button
               type="button"
-              onClick={() => setIsMobileChatOpen((prev) => !prev)}
+              onClick={() => setMobileView("participants")}
+              className="lg:hidden flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 transition-colors text-xs"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M9 11a4 4 0 100-8 4 4 0 000 8zm0 0c-4.418 0-8 2.239-8 5v2h8m6-9a3 3 0 110-6 3 3 0 010 6z"
+                />
+              </svg>
+              <span>Participantes</span>
+            </button>
+
+            {/* Botón móvil Chat */}
+            <button
+              type="button"
+              onClick={() => setMobileView("chat")}
               className="lg:hidden flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 transition-colors text-xs"
             >
               <svg
@@ -529,82 +509,150 @@ export default function Call() {
             </button>
 
             <button
-              onClick={() => navigate("/meetings")}
-              className="flex items-center gap-2 px-3 py-1 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 transition-colors text-xs sm:text-sm"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                />
-              </svg>
-              <span className="hidden sm:inline">Salir</span>
-            </button>
+  onClick={() => {
+    setMinimized(true);      
+    navigate("/meetings");   
+  }}
+  className="flex items-center gap-2 px-3 py-1 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 transition-colors text-xs sm:text-sm"
+>
+  <svg
+    className="w-4 h-4"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M10 19l-7-7m0 0l7-7m-7 7h18"
+    />
+  </svg>
+  <span className="hidden sm:inline">Salir</span>
+</button>
+
           </div>
         </div>
       </div>
 
-      {/* Main content: no global scroll, only internal areas */}
+      {/* Contenido principal */}
       <div className="flex-1 flex flex-col lg:flex-row gap-3 lg:gap-4 p-3 lg:p-4 overflow-hidden">
-        {/* Video Section - full height, responsive */}
+        {/* Zona de video */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <div className="bg-slate-900 rounded-xl border border-slate-700 p-3 lg:p-4 flex-1 flex flex-col min-h-0 overflow-hidden">
-            {/* Main video area */}
-            <div className="flex-1 bg-slate-800 rounded-lg border border-slate-700 flex items-center justify-center mb-3 lg:mb-4 min-h-0">
-              <div className="text-center">
-                <div className="w-16 h-16 rounded-full bg-emerald-500 grid place-items-center text-xl font-semibold text-slate-900 mx-auto mb-3">
+          <div className="bg-slate-900 rounded-xl border border-slate-700 p-3 lg:p-4 flex-1 flex flex-col min-h-0 overflow-hidden shadow-[0_0_0_1px_rgba(15,23,42,0.6)]">
+            {/* Video principal */}
+            <div className="flex-1 bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl border border-slate-700/80 flex items-center justify-center mb-3 lg:mb-4 min-h-0 relative overflow-hidden">
+              <div className="absolute inset-0 pointer-events-none opacity-40 bg-[radial-gradient(circle_at_10%_20%,rgba(56,189,248,0.15)_0,transparent_55%),radial-gradient(circle_at_80%_0,rgba(129,140,248,0.18)_0,transparent_55%)]" />
+              <div className="relative text-center">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 grid place-items-center text-xl font-semibold text-slate-950 mx-auto mb-3 shadow-lg shadow-emerald-500/30">
                   {getUserInitials()}
                 </div>
-                <p className="text-slate-300 text-sm">
-                  Tu video aparecerá aquí
+                <p className="text-slate-200 text-sm">
                 </p>
                 <p
-                  className={`text-xs mt-1 ${
-                    isConnected ? "text-green-400" : "text-yellow-400"
+                  className={`text-xs mt-1 flex items-center justify-center gap-1 ${
+                    isConnected ? "text-emerald-400" : "text-yellow-300"
                   }`}
                 >
-                  {isConnected ? "✅ Conectado" : "🔄 Conectando..."}
+                  <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-current" />
+                  <span>
+                    {isConnected ? "Conectado" : "Conectando..."}
+                  </span>
                 </p>
               </div>
             </div>
 
-            {/* Participants grid */}
+            {/* Botones panel lateral escritorio */}
+            <div className="hidden lg:flex justify-end gap-2 mb-3">
+              <button
+                type="button"
+                onClick={() =>
+                  setShowParticipantsPanel((prev) => !prev)
+                }
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  showParticipantsPanel
+                    ? "bg-slate-100 text-slate-900 border-slate-100"
+                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700"
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span>Participantes</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowChatPanel((prev) => !prev)
+                }
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  showChatPanel
+                    ? "bg-blue-500 text-white border-blue-500"
+                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700"
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-blue-400" />
+                <span>Chat</span>
+              </button>
+            </div>
+
+            {/* Recuadros de participantes abajo */}
             <div className="mb-3 lg:mb-4">
-              <h3 className="text-sm font-semibold text-slate-200 mb-2">
-                Participantes ({participants.length})
-              </h3>
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-24 md:max-h-32 overflow-y-auto">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-slate-200">
+                  Participantes ({participants.length})
+                </h3>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 max-h-32 overflow-y-auto">
                 {participants.map((participant) => (
                   <div
                     key={participant.socketId}
-                    className="bg-slate-800 rounded-lg p-2 text-center"
+                    className="rounded-xl bg-slate-800/80 border border-slate-700/90 p-2 flex flex-col items-center justify-center shadow-sm h-24"
                   >
-                    <div className="w-8 h-8 rounded-full bg-blue-500 grid place-items-center text-white font-semibold text-xs mx-auto mb-1">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 grid place-items-center text-xs font-semibold text-white shadow-md shadow-blue-500/30">
                       {getUserInitials(participant.displayName)}
                     </div>
-                    <p className="text-xs text-slate-300 truncate">
+                    <p className="mt-1 text-[11px] font-medium text-slate-100 truncate w-full text-center">
                       {participant.displayName}
                     </p>
-                    <div className="flex items-center justify-center gap-1 mt-1">
-                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                      <span className="text-[9px] text-green-400">
-                        En línea
-                      </span>
-                    </div>
+                    <p className="mt-0.5 text-[10px] text-emerald-400 flex items-center justify-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-[2px] bg-emerald-400" />
+                      <span>En línea</span>
+                    </p>
                   </div>
                 ))}
+                {participants.length === 0 && (
+                  <div className="col-span-full text-xs text-slate-500 italic">
+                    Aún no hay otros participantes conectados.
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Control buttons */}
+            {/* Controles: micrófono + info llamada + cámara + colgar */}
             <div className="flex justify-center items-center gap-3 pt-2 border-t border-slate-700 flex-shrink-0">
+              
+              {/* Botón tres puntos: info llamada */}
+              <button
+                type="button"
+                onClick={() => setShowCallInfo(true)}
+                className="w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 grid place-items-center transition-colors"
+              >
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 8a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 8a1.5 1.5 0 110-3 1.5 1.5 0 010 3z"
+                  />
+                </svg>
+              </button>
+              
+              {/* Mic */}
               <button className="w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 grid place-items-center transition-colors">
                 <svg
                   className="w-5 h-5 text-white"
@@ -616,11 +664,12 @@ export default function Call() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 016 0v6a3 3 0 01-3 3z"
+                    d="M12 1a3 3 0 00-3 3v6a3 3 0 106 0V4a3 3 0 00-3-3zM5 10a7 7 0 0014 0M12 17v4m0 0H9m3 0h3"
                   />
                 </svg>
               </button>
 
+              {/* Cámara */}
               <button className="w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 grid place-items-center transition-colors">
                 <svg
                   className="w-5 h-5 text-white"
@@ -637,12 +686,308 @@ export default function Call() {
                 </svg>
               </button>
 
+              {/* Colgar */}
               <button
-                onClick={handleEndCall}
-                className="w-10 h-10 rounded-full bg-red-600 hover:bg-red-500 grid place-items-center transition-colors"
+  onClick={() => setShowEndCallConfirm(true)}
+  className="w-10 h-10 rounded-full bg-red-600 hover:bg-red-500 grid place-items-center transition-colors"
+>
+  <svg
+    className="w-5 h-5 text-white"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M6 18L18 6M6 6l12 12"
+    />
+  </svg>
+</button>
+
+            </div>
+          </div>
+        </div>
+
+        {/* Panel lateral SOLO escritorio: ahora SOLO si hay algo abierto */}
+        {(showParticipantsPanel || showChatPanel) && (
+          <div
+            className={`
+              hidden lg:flex
+              flex-col min-h-0
+              bg-slate-900 border border-slate-700
+              lg:rounded-xl
+              lg:h-auto lg:w-96
+              p-3 lg:p-4
+            `}
+          >
+            {/* Header pequeño del panel */}
+            <div className="flex items-center justify-between mb-3">
+              <span className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                {participants.length} en la reunión
+              </span>
+            </div>
+
+            {/* PANEL PARTICIPANTES escritorio */}
+            {showParticipantsPanel && (
+              <div
+                className={`flex flex-col min-h-0 mb-3 ${
+                  bothPanelsOpen ? "flex-[0.45]" : "flex-1"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-emerald-500/20 grid place-items-center">
+                      <svg
+                        className="w-3.5 h-3.5 text-emerald-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M17 20h5v-2a3 3 0 00-5.356-1.857M9 11a4 4 0 100-8 4 4 0 000 8zm0 0c-4.418 0-8 2.239-8 5v2h8m6-9a3 3 0 110-6 3 3 0 010 6z"
+                        />
+                      </svg>
+                    </div>
+                    <h3 className="font-semibold text-slate-200 text-sm">
+                      Participantes
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowParticipantsPanel(false)}
+                    className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-2 pr-1 rounded-lg bg-slate-900/60 border border-slate-700/80 p-2">
+                  {participants.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic">
+                      Aún no hay más participantes conectados.
+                    </p>
+                  ) : (
+                    participants.map((participant) => {
+                      const isCurrentUser = participant.userId === user?.uid;
+
+                      return (
+                        <div
+                          key={participant.socketId}
+                          className="flex items-center gap-3 px-2 py-2 rounded-lg bg-slate-800/80 border border-slate-700/80 shadow-sm"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 grid place-items-center text-xs font-semibold text-slate-950">
+                            {getUserInitials(
+                              participant.displayName ||
+                                participant.email
+                            )}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs sm:text-sm font-medium text-slate-100 truncate">
+                              {participant.displayName ||
+                                participant.email}
+                              {isCurrentUser && (
+                                <span className="ml-1 text-[10px] text-emerald-400 font-normal">
+                                  (Tú)
+                                </span>
+                              )}
+                            </p>
+                            {participant.email && (
+                              <p className="text-[11px] text-slate-400 truncate">
+                                {participant.email}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-[2px] bg-emerald-400" />
+                            <span className="text-[10px] text-emerald-300">
+                              En línea
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* PANEL CHAT escritorio */}
+            {showChatPanel && (
+              <div
+                className={`flex flex-col min-h-0 ${
+                  bothPanelsOpen ? "flex-[0.55]" : "flex-1"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-blue-500/20 grid place-items-center">
+                      <svg
+                        className="w-3.5 h-3.5 text-blue-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 10h8m-8 4h5M4 6h16v10H5.5L4 17.5V6z"
+                        />
+                      </svg>
+                    </div>
+                    <h3 className="font-semibold text-slate-200 text-sm">
+                      Chat en vivo
+                    </h3>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowChatPanel(false)}
+                    className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {typingUsers.size > 0 && (
+                  <div className="text-[11px] text-slate-400 mb-1">
+                    {Array.from(typingUsers)
+                      .filter((name) => name !== user?.displayName)
+                      .join(", ")}{" "}
+                    está escribiendo...
+                  </div>
+                )}
+
+                <div className="flex-1 overflow-y-auto space-y-2 mb-3 min-h-0 rounded-lg bg-slate-900/60 border border-slate-700/80 p-2">
+                  {chatMessages.length === 0 ? (
+                    <div className="text-center text-slate-400 text-sm py-6">
+                      {socketError ? (
+                        <div>
+                          <div className="text-red-400 mb-2 text-xs">
+                            ❌ {socketError}
+                          </div>
+                          <button
+                            onClick={handleRetryConnection}
+                            className="text-blue-400 hover:text-blue-300 underline text-xs"
+                          >
+                            Reintentar conexión
+                          </button>
+                        </div>
+                      ) : (
+                        "No hay mensajes aún. Inicia la conversación."
+                      )}
+                    </div>
+                  ) : (
+                    chatMessages.map((msg) => (
+                      <div key={msg.id} className="text-xs">
+                        <div className="flex justify-between items-start mb-1">
+                          <span
+                            className={`font-medium ${
+                              msg.userId === user?.uid
+                                ? "text-blue-400"
+                                : msg.type === "system"
+                                ? "text-yellow-400"
+                                : "text-slate-200"
+                            }`}
+                          >
+                            {msg.displayName}
+                            {msg.userId === user?.uid && " (Tú)"}
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            {formatMessageTime(msg.timestamp)}
+                          </span>
+                        </div>
+                        <p
+                          className={`text-slate-300 rounded-lg px-2.5 py-2 leading-snug ${
+                            msg.type === "system"
+                              ? "bg-yellow-900/20 italic"
+                              : msg.userId === user?.uid
+                              ? "bg-blue-900/30"
+                              : "bg-slate-800/60"
+                          }`}
+                        >
+                          {msg.message}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                  <div ref={chatMessagesEndRef} />
+                </div>
+
+                <form
+                  onSubmit={handleSendMessage}
+                  className="flex gap-2 flex-shrink-0"
+                >
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => {
+                      setNewMessage(e.target.value);
+                      if (e.target.value.trim()) {
+                        handleTyping();
+                      }
+                    }}
+                    onBlur={handleStopTyping}
+                    placeholder={
+                      !isConnected
+                        ? "Conectando al chat..."
+                        : socketError
+                        ? "Chat no disponible"
+                        : "Escribe un mensaje..."
+                    }
+                    disabled={!isConnected || !!socketError}
+                    className="flex-1 rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-60"
+                  />
+                  <button
+                    type="submit"
+                    disabled={
+                      !newMessage.trim() || !isConnected || !!socketError
+                    }
+                    className="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:cursor-not-allowed grid place-items-center transition-colors"
+                  >
+                    <svg
+                      className="w-4 h-4 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                  </button>
+                </form>
+              </div>
+
+              
+
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* VISTA MÓVIL FULLSCREEN PARTICIPANTES / CHAT */}
+      {mobileView !== "call" && (
+        <div className="fixed inset-0 z-40 bg-slate-950 lg:hidden flex flex-col">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800 bg-slate-900">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMobileView("call")}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 grid place-items-center text-slate-200"
               >
                 <svg
-                  className="w-5 h-5 text-white"
+                  className="w-4 h-4"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -651,156 +996,345 @@ export default function Call() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
                   />
                 </svg>
+              </button>
+              <div className="flex flex-col">
+                <span className="text-xs font-medium text-slate-100">
+                  {mobileView === "participants"
+                    ? "Participantes"
+                    : "Chat en vivo"}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  {participants.length} en la reunión
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {mobileView === "participants" && (
+                <button
+                  type="button"
+                  onClick={() => setMobileView("chat")}
+                  className="text-[11px] px-3 py-1 rounded-full border border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                >
+                  Ir al chat
+                </button>
+              )}
+              {mobileView === "chat" && (
+                <button
+                  type="button"
+                  onClick={() => setMobileView("participants")}
+                  className="text-[11px] px-3 py-1 rounded-full border border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                >
+                  Ver participantes
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex-1 p-3 flex flex-col min-h-0">
+            {mobileView === "participants" ? (
+              <div className="flex-1 overflow-y-auto space-y-2 rounded-lg bg-slate-900/60 border border-slate-700/80 p-2">
+                {participants.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">
+                    Aún no hay más participantes conectados.
+                  </p>
+                ) : (
+                  participants.map((participant) => {
+                    const isCurrentUser = participant.userId === user?.uid;
+
+                    return (
+                      <div
+                        key={participant.socketId}
+                        className="flex items-center gap-3 px-2 py-2 rounded-lg bg-slate-800/80 border border-slate-700/80 shadow-sm"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 grid place-items-center text-xs font-semibold text-slate-950">
+                          {getUserInitials(
+                            participant.displayName || participant.email
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs sm:text-sm font-medium text-slate-100 truncate">
+                            {participant.displayName || participant.email}
+                            {isCurrentUser && (
+                              <span className="ml-1 text-[10px] text-emerald-400 font-normal">
+                                (Tú)
+                              </span>
+                            )}
+                          </p>
+                          {participant.email && (
+                            <p className="text-[11px] text-slate-400 truncate">
+                              {participant.email}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-[2px] bg-emerald-400" />
+                          <span className="text-[10px] text-emerald-300">
+                            En línea
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            ) : (
+              <>
+                {typingUsers.size > 0 && (
+                  <div className="text-[11px] text-slate-400 mb-1">
+                    {Array.from(typingUsers)
+                      .filter((name) => name !== user?.displayName)
+                      .join(", ")}{" "}
+                    está escribiendo...
+                  </div>
+                )}
+
+                <div className="flex-1 overflow-y-auto space-y-2 mb-3 min-h-0 rounded-lg bg-slate-900/60 border border-slate-700/80 p-2">
+                  {chatMessages.length === 0 ? (
+                    <div className="text-center text-slate-400 text-sm py-6">
+                      {socketError ? (
+                        <div>
+                          <div className="text-red-400 mb-2 text-xs">
+                            ❌ {socketError}
+                          </div>
+                          <button
+                            onClick={handleRetryConnection}
+                            className="text-blue-400 hover:text-blue-300 underline text-xs"
+                          >
+                            Reintentar conexión
+                          </button>
+                        </div>
+                      ) : (
+                        "No hay mensajes aún. Inicia la conversación."
+                      )}
+                    </div>
+                  ) : (
+                    chatMessages.map((msg) => (
+                      <div key={msg.id} className="text-xs">
+                        <div className="flex justify-between items-start mb-1">
+                          <span
+                            className={`font-medium ${
+                              msg.userId === user?.uid
+                                ? "text-blue-400"
+                                : msg.type === "system"
+                                ? "text-yellow-400"
+                                : "text-slate-200"
+                            }`}
+                          >
+                            {msg.displayName}
+                            {msg.userId === user?.uid && " (Tú)"}
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            {formatMessageTime(msg.timestamp)}
+                          </span>
+                        </div>
+                        <p
+                          className={`text-slate-300 rounded-lg px-2.5 py-2 leading-snug ${
+                            msg.type === "system"
+                              ? "bg-yellow-900/20 italic"
+                              : msg.userId === user?.uid
+                              ? "bg-blue-900/30"
+                              : "bg-slate-800/60"
+                          }`}
+                        >
+                          {msg.message}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                  <div ref={chatMessagesEndRef} />
+                </div>
+
+                <form
+                  onSubmit={handleSendMessage}
+                  className="flex gap-2 flex-shrink-0"
+                >
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => {
+                      setNewMessage(e.target.value);
+                      if (e.target.value.trim()) {
+                        handleTyping();
+                      }
+                    }}
+                    onBlur={handleStopTyping}
+                    placeholder={
+                      !isConnected
+                        ? "Conectando al chat..."
+                        : socketError
+                        ? "Chat no disponible"
+                        : "Escribe un mensaje..."
+                    }
+                    disabled={!isConnected || !!socketError}
+                    className="flex-1 rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-60"
+                  />
+                  <button
+                    type="submit"
+                    disabled={
+                      !newMessage.trim() || !isConnected || !!socketError
+                    }
+                    className="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:cursor-not-allowed grid place-items-center transition-colors"
+                  >
+                    <svg
+                      className="w-4 h-4 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Confirmar fin de llamada */}
+      {showEndCallConfirm && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center px-4"
+          onClick={() => setShowEndCallConfirm(false)}
+        >
+          <div
+            className="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-3">
+             
+              <div>
+                <h2 className="text-sm sm:text-base font-semibold text-slate-50">
+                  Finalizar llamada
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Si finalizas la llamada saldrás de la reunión y dejarás de estar visible para los demás participantes.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 mt-3">
+              <button
+                type="button"
+                onClick={() => setShowEndCallConfirm(false)}
+                className="px-3.5 py-1.5 rounded-lg border border-slate-600 text-xs sm:text-sm text-slate-200 hover:bg-slate-800 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEndCallConfirm(false);
+                  handleEndCall();
+                }}
+                className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-xs sm:text-sm text-white font-medium transition-colors"
+              >
+                Finalizar llamada
               </button>
             </div>
           </div>
         </div>
+      )}
 
-        {/* Chat Section:
-            - Desktop: right panel
-            - Mobile: bottom drawer with toggle (no global scroll) */}
-        <div
-          className={`
-            ${
-              isMobileChatOpen ? "flex" : "hidden"
-            } lg:flex flex-col min-h-0
-            bg-slate-900 border border-slate-700
-            lg:rounded-xl
-            ${isMobileChatOpen ? "fixed inset-x-0 bottom-0 h-[55vh] z-40 rounded-t-2xl" : ""}
-            lg:static lg:h-auto lg:w-80
-            p-3 lg:p-4
-          `}
-        >
-          {/* Mobile drawer handle */}
-          <div className="lg:hidden flex justify-center mb-2">
-            <div className="w-10 h-1.5 rounded-full bg-slate-600" />
-          </div>
-
-          <h3 className="font-semibold text-slate-200 mb-2 lg:mb-3 flex items-center justify-between text-sm">
-            <span>Chat en vivo</span>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded-full">
-                {participants.length} online
-              </span>
-              {isMobileChatOpen && (
-                <button
-                  type="button"
-                  onClick={() => setIsMobileChatOpen(false)}
-                  className="lg:hidden text-xs text-slate-300 hover:text-white"
-                >
-                  Cerrar
-                </button>
-              )}
-            </div>
-          </h3>
-
-          {typingUsers.size > 0 && (
-            <div className="text-xs text-slate-400 mb-2 italic">
-              {Array.from(typingUsers).join(", ")} está escribiendo...
-            </div>
-          )}
-
-          {/* Messages area – independent scroll, no global scroll */}
-          <div className="flex-1 overflow-y-auto space-y-2 mb-3 min-h-0">
-            {chatMessages.length === 0 ? (
-              <div className="text-center text-slate-400 text-sm py-6">
-                {socketError ? (
-                  <div>
-                    <div className="text-red-400 mb-2 text-xs">
-                      ❌ {socketError}
-                    </div>
-                    <button
-                      onClick={handleRetryConnection}
-                      className="text-blue-400 hover:text-blue-300 underline text-xs"
-                    >
-                      Reintentar conexión
-                    </button>
-                  </div>
-                ) : (
-                  "No hay mensajes aún"
-                )}
-              </div>
-            ) : (
-              chatMessages.map((msg) => (
-                <div key={msg.id} className="text-xs">
-                  <div className="flex justify-between items-start mb-1">
-                    <span
-                      className={`font-medium ${
-                        msg.userId === user?.uid
-                          ? "text-blue-400"
-                          : msg.type === "system"
-                          ? "text-yellow-400"
-                          : "text-slate-200"
-                      }`}
-                    >
-                      {msg.displayName}
-                      {msg.userId === user?.uid && " (Tú)"}
-                    </span>
-                    <span className="text-xs text-slate-400">
-                      {formatMessageTime(msg.timestamp)}
-                    </span>
-                  </div>
-                  <p
-                    className={`text-slate-300 rounded-lg p-2 ${
-                      msg.type === "system"
-                        ? "bg-yellow-900/20 italic"
-                        : msg.userId === user?.uid
-                        ? "bg-blue-900/30"
-                        : "bg-slate-800/50"
-                    }`}
-                  >
-                    {msg.message}
-                  </p>
-                </div>
-              ))
-            )}
-            <div ref={chatMessagesEndRef} />
-          </div>
-
-          {/* Input – fixed height, no growth */}
-          <form
-            onSubmit={handleSendMessage}
-            className="flex gap-2 flex-shrink-0"
-          >
-            <input
-              type="text"
-              value={newMessage}
-              onChange={(e) => {
-                setNewMessage(e.target.value);
-                if (e.target.value.trim()) {
-                  handleTyping();
-                }
-              }}
-              onBlur={handleStopTyping}
-              placeholder="Escribe un mensaje..."
-              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={!isConnected}
-            />
-            <button
-              type="submit"
-              disabled={!newMessage.trim() || !isConnected}
-              className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 rounded-lg px-3 py-2 text-white transition-colors flex-shrink-0"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                />
-              </svg>
-            </button>
-          </form>
+      {/* MODAL INFO DE LA LLAMADA */}
+{showCallInfo && (
+  <div
+    className="fixed inset-0 z-50 bg-slate-950/70 flex items-center justify-center px-4"
+    onClick={() => setShowCallInfo(false)}
+  >
+    <div
+      className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-4 sm:p-5 shadow-xl"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-xs text-slate-400">Información de la llamada</p>
+          <h2 className="text-sm sm:text-base font-semibold text-slate-50">
+            {meeting?.title || "Reunión sin título"}
+          </h2>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowCallInfo(false)}
+          className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 grid place-items-center text-slate-300 text-xs border border-slate-700"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="space-y-3 text-xs sm:text-sm">
+        <div className="flex items-center justify-between gap-2">
+  <span className="text-slate-400">Código de reunión</span>
+
+  <button
+    type="button"
+    onClick={handleCopyMeetingCode}
+    className="flex items-center gap-1 font-mono text-slate-100 text-[11px] bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700 hover:bg-slate-700 transition-colors"
+  >
+    <span>{meetingId || "N/D"}</span>
+    <svg
+      className="w-3.5 h-3.5 text-slate-200"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M8 16h8a2 2 0 002-2V7M8 16a2 2 0 01-2-2V7m2 9h8m-8 0l-2 2m10-11a2 2 0 00-2-2h-5m7 2V5a2 2 0 00-2-2h-5m0 0L7 5m3-2v3"
+      />
+    </svg>
+  </button>
+</div>
+
+
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-slate-400">Participantes actuales</span>
+          <span className="text-slate-100">
+            {participants.length} en la llamada
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-slate-400">Estado</span>
+          <span className="text-slate-100">
+            {meeting?.status || "N/D"}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-slate-400">Creada</span>
+          <span className="text-slate-100">
+            {formatDateTime(meeting?.createdAt)}
+          </span>
+        </div>
+
+        {meeting?.scheduledAt && (
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-slate-400">Programada para</span>
+            <span className="text-slate-100">
+              {formatDateTime(meeting.scheduledAt)}
+            </span>
+          </div>
+        )}
+
+        
       </div>
     </div>
+  </div>
+)}
+ </div>
   );
 }

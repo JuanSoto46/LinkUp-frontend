@@ -31,9 +31,20 @@ function formatDateTime(value?: string | null): string {
 }
 
 /**
+ * Normalize API responses that may come as `meeting`,
+ * `data.meeting` or the plain meeting object.
+ */
+function normalizeUpdatedMeeting(res: any): Meeting {
+  if (!res) throw new Error("Respuesta vacía del servidor");
+  if (res.meeting) return res.meeting as Meeting;
+  if (res.data && res.data.meeting) return res.data.meeting as Meeting;
+  return res as Meeting;
+}
+
+/**
  * Meetings page that allows the user to:
  * - list their meetings
- * - edit title / description / scheduled date-time
+ * - edit title / description / scheduled date-time (via modal)
  * - delete a meeting
  * - navigate to join or create a meeting
  *
@@ -47,7 +58,9 @@ export default function Meetings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // edit modal state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editMeetingId, setEditMeetingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editScheduledAt, setEditScheduledAt] = useState("");
@@ -73,8 +86,6 @@ export default function Meetings() {
 
     try {
       const res = await api.getMeetings();
-      // Backend most likely returns a plain array,
-      // but we try a few common shapes to be safe.
       const list: Meeting[] = Array.isArray(res)
         ? res
         : (res as any).meetings || (res as any).data || [];
@@ -94,11 +105,11 @@ export default function Meetings() {
   }, []);
 
   useEffect(() => {
-    // If backend is slow (Render waking up), show a nicer hint
+    // If backend is slow, show a hint
     if (loading) {
       const t = setTimeout(() => {
         setIsSlowLoading(true);
-      }, 3000); // 3s threshold to consider it "slow"
+      }, 3000);
       return () => clearTimeout(t);
     } else {
       setIsSlowLoading(false);
@@ -106,20 +117,16 @@ export default function Meetings() {
   }, [loading]);
 
   /**
-   * Starts editing mode for a given meeting and
-   * pre-fills the local form state.
-   *
-   * @param meeting - Meeting to be edited.
+   * Open edit modal for a given meeting and pre-fill fields.
    */
-  function startEdit(meeting: Meeting) {
-    setEditingId(meeting.id);
+  function openEditModal(meeting: Meeting) {
+    setEditMeetingId(meeting.id);
     setEditTitle(meeting.title || "");
     setEditDescription(meeting.description || "");
 
     if (meeting.scheduledAt) {
       const d = new Date(meeting.scheduledAt);
       if (!Number.isNaN(d.getTime())) {
-        // Convert ISO to a value compatible with datetime-local
         const pad = (n: number) => String(n).padStart(2, "0");
         const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
         const y = local.getFullYear();
@@ -134,27 +141,29 @@ export default function Meetings() {
     } else {
       setEditScheduledAt("");
     }
+
+    setEditOpen(true);
   }
 
   /**
-   * Resets the editing state and clears the temporary form values.
+   * Close edit modal and reset fields.
    */
-  function cancelEdit() {
-    setEditingId(null);
+  function closeEditModal() {
+    setEditOpen(false);
+    setEditMeetingId(null);
     setEditTitle("");
     setEditDescription("");
     setEditScheduledAt("");
   }
 
   /**
-   * Persists the edited meeting data to the backend and
-   * updates the local list with the returned entity.
-   *
-   * @param id - ID of the meeting being saved.
+   * Persist edition to backend and update local list.
    */
-  async function handleSave(id: string) {
+  async function handleSaveEdit() {
+    if (!editMeetingId) return;
+
     try {
-      setSavingId(id);
+      setSavingId(editMeetingId);
       setError(null);
 
       const payload: {
@@ -173,10 +182,16 @@ export default function Meetings() {
         payload.scheduledAt = null;
       }
 
-      const updated = (await api.updateMeeting(id, payload)) as Meeting;
+      const rawUpdated = await api.updateMeeting(editMeetingId, payload);
+      const updated = normalizeUpdatedMeeting(rawUpdated);
 
-      setMeetings((prev) => prev.map((m) => (m.id === id ? updated : m)));
-      cancelEdit();
+      setMeetings((prev) =>
+        prev.map((m) =>
+          m.id === editMeetingId ? { ...m, ...updated } : m
+        )
+      );
+
+      closeEditModal();
     } catch (e: any) {
       console.error(e);
       setError(e.message || "No se pudo guardar la reunión.");
@@ -188,8 +203,6 @@ export default function Meetings() {
   /**
    * Asks for confirmation and, if accepted, deletes a meeting
    * using the backend API, then removes it from local state.
-   *
-   * @param id - ID of the meeting to delete.
    */
   async function handleDelete(id: string) {
     const confirmed = window.confirm(
@@ -211,226 +224,228 @@ export default function Meetings() {
   }
 
   /**
-   * Navigate to join meeting page for entering meeting ID
+   * Navigate to join meeting page for entering meeting ID.
    */
   function handleJoinMeeting() {
     navigate("/join-meeting");
   }
 
   /**
-   * Enter directly into an existing meeting
+   * Enter directly into an existing meeting.
    */
   function handleEnterMeeting(meetingId: string) {
     navigate(`/call?meetingId=${meetingId}`);
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-slate-50">
-          Mis reuniones
-        </h1>
+    <div className="max-w-5xl mx-auto min-h-[75vh] flex flex-col">
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-semibold text-slate-50">
+            Mis reuniones
+          </h1>
 
-        <div className="flex gap-3">
-          <button
-            className="px-4 py-2 rounded-full border border-slate-600 text-sm text-slate-200 hover:bg-slate-800"
-            onClick={handleJoinMeeting}
-          >
-            Unirse a reunión
-          </button>
-
-          <button
-            className="px-4 py-2 rounded-full bg-sky-600 text-sm text-slate-50 hover:bg-sky-500 shadow"
-            onClick={() => navigate("/create-meeting")}
-          >
-            Crear reunión
-          </button>
-        </div>
-      </div>
-
-      {/* Initial full loader */}
-      {isInitialLoad && loading && (
-        <div className="rounded-2xl border border-slate-800 bg-[#050816] p-6 text-sm text-slate-300 animate-pulse">
-          Cargando reuniones...
-          {isSlowLoading && (
-            <p className="mt-2 text-xs text-slate-400">
-              El servidor está despertando, esto puede tardar unos
-              segundos.
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Subsequent background refresh indicator */}
-      {!isInitialLoad && loading && (
-        <div className="mb-3 text-xs text-slate-400">
-          Actualizando reuniones...
-        </div>
-      )}
-
-      {error && (
-        <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-6 text-sm text-red-200 mt-3">
-          {error}
-          <div className="mt-3 flex items-center gap-3">
+          <div className="flex gap-3">
             <button
-              onClick={() => loadMeetings(true)}
-              className="text-xs px-3 py-1.5 rounded-full border border-red-400/60 hover:bg-red-500/10"
+              className="px-4 py-2 rounded-full border border-slate-600 text-sm text-slate-200 hover:bg-slate-800"
+              onClick={handleJoinMeeting}
             >
-              Reintentar
+              Unirse a reunión
             </button>
-            {!loading && (
-              <button
-                onClick={() => loadMeetings(false)}
-                className="text-xs px-3 py-1.5 rounded-full border border-slate-500/60 text-red-100 hover:bg-slate-900/40"
-              >
-                Reintentar en segundo plano
-              </button>
-            )}
+
+            <button
+              className="px-4 py-2 rounded-full bg-sky-600 text-sm text-slate-50 hover:bg-sky-500 shadow"
+              onClick={() => navigate("/create-meeting")}
+            >
+              Crear reunión
+            </button>
           </div>
         </div>
-      )}
 
-      {!loading && !error && meetings.length === 0 && (
-        <div className="rounded-2xl border border-slate-800 bg-[#050816] p-6 text-sm text-slate-300 mt-3">
-          Aún no tienes reuniones. Crea la primera con el botón de
-          arriba.
-        </div>
-      )}
+        {/* Initial full loader */}
+        {isInitialLoad && loading && (
+          <div className="rounded-2xl border border-slate-800 bg-[#050816] p-6 text-sm text-slate-300 animate-pulse">
+            Cargando reuniones...
+            {isSlowLoading && (
+              <p className="mt-2 text-xs text-slate-400">
+                El servidor está despertando, esto puede tardar unos segundos.
+              </p>
+            )}
+          </div>
+        )}
 
-      {/* Show list even if we are doing a background refresh */}
-      {!error && meetings.length > 0 && (
-        <div className="grid gap-4 mt-3">
-          {meetings.map((m) => {
-            const isEditing = editingId === m.id;
+        {/* Subsequent background refresh indicator */}
+        {!isInitialLoad && loading && (
+          <div className="mb-3 text-xs text-slate-400">
+            Actualizando reuniones...
+          </div>
+        )}
 
-            return (
+        {error && (
+          <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-6 text-sm text-red-200 mt-3">
+            {error}
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                onClick={() => loadMeetings(true)}
+                className="text-xs px-3 py-1.5 rounded-full border border-red-400/60 hover:bg-red-500/10"
+              >
+                Reintentar
+              </button>
+              {!loading && (
+                <button
+                  onClick={() => loadMeetings(false)}
+                  className="text-xs px-3 py-1.5 rounded-full border border-slate-500/60 text-red-100 hover:bg-slate-900/40"
+                >
+                  Reintentar en segundo plano
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {!loading && !error && meetings.length === 0 && (
+          <div className="rounded-2xl border border-slate-800 bg-[#050816] p-6 text-sm text-slate-300 mt-3">
+            Aún no tienes reuniones. Crea la primera con el botón de arriba.
+          </div>
+        )}
+
+        {/* Show list even if we are doing a background refresh */}
+        {!error && meetings.length > 0 && (
+          <div className="grid gap-4 mt-3">
+            {meetings.map((m) => (
               <div
                 key={m.id}
                 className="rounded-2xl border border-slate-800 bg-[#050816] p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4"
               >
-                {isEditing ? (
-                  <div className="flex-1 grid gap-3 text-sm">
-                    <p className="text-[11px] text-slate-400 mb-1 break-all">
-                      <span className="font-semibold">
-                        ID de reunión:
-                      </span>{" "}
-                      <span className="font-mono">{m.id}</span>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-slate-100">
+                    {m.title || "Reunión sin título"}
+                  </p>
+
+                  <p className="text-xs text-slate-400 mt-1">
+                    Creada: {formatDateTime(m.createdAt)}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Programada: {formatDateTime(m.scheduledAt)}
+                  </p>
+
+                  <p className="text-[11px] text-slate-500 mt-1 break-all">
+                    <span className="font-semibold">ID de reunión:</span>{" "}
+                    <span className="font-mono">{m.id}</span>
+                  </p>
+
+                  {m.description && (
+                    <p className="text-xs text-slate-300 mt-2">
+                      {m.description}
                     </p>
-
-                    <label className="grid gap-1">
-                      <span>Título de la reunión</span>
-                      <input
-                        className="h-10 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                        required
-                      />
-                    </label>
-
-                    <label className="grid gap-1">
-                      <span>Fecha y hora programada</span>
-                      <input
-                        type="datetime-local"
-                        className="h-10 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm"
-                        value={editScheduledAt}
-                        onChange={(e) =>
-                          setEditScheduledAt(e.target.value)
-                        }
-                      />
-                    </label>
-
-                    <label className="grid gap-1">
-                      <span>Descripción</span>
-                      <textarea
-                        className="min-h-[70px] rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm"
-                        value={editDescription}
-                        onChange={(e) =>
-                          setEditDescription(e.target.value)
-                        }
-                      />
-                    </label>
-                  </div>
-                ) : (
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-slate-100">
-                      {m.title || "Reunión sin título"}
-                    </p>
-
-                    <p className="text-xs text-slate-400 mt-1">
-                      Creada: {formatDateTime(m.createdAt)}
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      Programada: {formatDateTime(m.scheduledAt)}
-                    </p>
-
-                    <p className="text-[11px] text-slate-500 mt-1 break-all">
-                      <span className="font-semibold">
-                        ID de reunión:
-                      </span>{" "}
-                      <span className="font-mono">{m.id}</span>
-                    </p>
-
-                    {m.description && (
-                      <p className="text-xs text-slate-300 mt-2">
-                        {m.description}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                <div className="flex flex-wrap gap-2 justify-end">
-                  {isEditing ? (
-                    <>
-                      <button
-                        className="text-xs px-3 py-1.5 rounded-full border border-slate-600 text-slate-200 hover:bg-slate-800"
-                        type="button"
-                        onClick={cancelEdit}
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        className="text-xs px-3 py-1.5 rounded-full bg-sky-600 text-slate-50 hover:bg-sky-500 disabled:opacity-60"
-                        type="button"
-                        disabled={savingId === m.id}
-                        onClick={() => handleSave(m.id)}
-                      >
-                        {savingId === m.id
-                          ? "Guardando..."
-                          : "Guardar cambios"}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        className="text-xs px-3 py-1.5 rounded-full border border-slate-700 text-slate-200 hover:bg-slate-800"
-                        type="button"
-                        onClick={() => handleEnterMeeting(m.id)}
-                      >
-                        Entrar
-                      </button>
-                      <button
-                        className="text-xs px-3 py-1.5 rounded-full border border-slate-600 text-slate-200 hover:bg-slate-800"
-                        type="button"
-                        onClick={() => startEdit(m)}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        className="text-xs px-3 py-1.5 rounded-full border border-red-500/70 text-red-200 hover:bg-red-500/10 disabled:opacity-60"
-                        type="button"
-                        disabled={deletingId === m.id}
-                        onClick={() => handleDelete(m.id)}
-                      >
-                        {deletingId === m.id
-                          ? "Eliminando..."
-                          : "Eliminar"}
-                      </button>
-                    </>
                   )}
                 </div>
+
+                <div className="flex flex-wrap gap-2 justify-end">
+                  <button
+                    className="text-xs px-3 py-1.5 rounded-full border border-slate-700 text-slate-200 hover:bg-slate-800"
+                    type="button"
+                    onClick={() => handleEnterMeeting(m.id)}
+                  >
+                    Entrar
+                  </button>
+                  <button
+                    className="text-xs px-3 py-1.5 rounded-full border border-slate-600 text-slate-200 hover:bg-slate-800"
+                    type="button"
+                    onClick={() => openEditModal(m)}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    className="text-xs px-3 py-1.5 rounded-full border border-red-500/70 text-red-200 hover:bg-red-500/10 disabled:opacity-60"
+                    type="button"
+                    disabled={deletingId === m.id}
+                    onClick={() => handleDelete(m.id)}
+                  >
+                    {deletingId === m.id ? "Eliminando..." : "Eliminar"}
+                  </button>
+                </div>
               </div>
-            );
-          })}
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Edit modal */}
+      {editOpen && editMeetingId && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/80 px-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-xs text-slate-400">Editar reunión</p>
+                <h2 className="text-sm font-semibold text-slate-50">
+                  {editTitle || "Reunión sin título"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={closeEditModal}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 grid place-items-center text-slate-100 border border-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-sm">
+              <label className="grid gap-1">
+                <span className="text-xs text-slate-300">
+                  Título de la reunión
+                </span>
+                <input
+                  className="h-10 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder="Escribe un título"
+                  required
+                />
+              </label>
+
+              <label className="grid gap-1">
+                <span className="text-xs text-slate-300">
+                  Fecha y hora programada
+                </span>
+                <input
+                  type="datetime-local"
+                  className="h-10 rounded-lg bg-slate-950 border border-slate-700 px-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                  value={editScheduledAt}
+                  onChange={(e) => setEditScheduledAt(e.target.value)}
+                />
+              </label>
+
+              <label className="grid gap-1">
+                <span className="text-xs text-slate-300">Descripción</span>
+                <textarea
+                  className="min-h-[80px] rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="Detalles adicionales de la reunión"
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                type="button"
+                onClick={closeEditModal}
+                className="text-xs px-4 py-2 rounded-full border border-slate-600 text-slate-200 hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={savingId === editMeetingId}
+                onClick={handleSaveEdit}
+                className="text-xs px-4 py-2 rounded-full bg-sky-600 text-slate-50 hover:bg-sky-500 disabled:opacity-60"
+              >
+                {savingId === editMeetingId ? "Guardando..." : "Guardar cambios"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
