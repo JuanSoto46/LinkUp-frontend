@@ -4,6 +4,8 @@ import { auth } from "../lib/firebase";
 import { api } from "../lib/api";
 import { socketService } from "../lib/socket";
 import { useCallUi } from "../context/CallUiContext";
+import { useVoice } from "../lib/useVoice";
+
 
 
 interface Meeting {
@@ -31,6 +33,18 @@ interface ChatMessage {
   message: string;
   type: "text" | "system";
   timestamp: string;
+}
+
+function RemoteAudio({ stream }: { stream: MediaStream }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  return <audio ref={audioRef} autoPlay />;
 }
 
 /**
@@ -75,6 +89,14 @@ export default function Call() {
   const { setActiveCall, setMinimized } = useCallUi();
 
   const [showEndCallConfirm, setShowEndCallConfirm] = useState(false);
+
+    // ---- VOZ EN TIEMPO REAL ----
+  const stableUserId = user?.uid || auth.currentUser?.uid || "";
+  const { localStream, remoteStreams, isMicEnabled, toggleMic } = useVoice({
+    meetingId: meetingId || "",
+    userId: stableUserId
+  });
+
 
 
   const scrollToBottom = () => {
@@ -652,22 +674,42 @@ const handleCopyMeetingCode = async () => {
                 </svg>
               </button>
               
-              {/* Mic */}
-              <button className="w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 grid place-items-center transition-colors">
-                <svg
-                  className="w-5 h-5 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 1a3 3 0 00-3 3v6a3 3 0 106 0V4a3 3 0 00-3-3zM5 10a7 7 0 0014 0M12 17v4m0 0H9m3 0h3"
-                  />
-                </svg>
-              </button>
+              {/* Mic (voz en tiempo real) */}
+<button
+  type="button"
+  onClick={toggleMic}
+  className={`w-10 h-10 rounded-full grid place-items-center transition-colors ${
+    isMicEnabled
+      ? "bg-slate-700 hover:bg-slate-600"
+      : "bg-red-700 hover:bg-red-600"
+  }`}
+>
+  <svg
+    className="w-5 h-5 text-white"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+  >
+    {isMicEnabled ? (
+      // mic encendido
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 1a3 3 0 00-3 3v6a3 3 0 106 0V4a3 3 0 00-3-3zM5 10a7 7 0 0014 0M12 17v4m0 0H9m3 0h3"
+      />
+    ) : (
+      // mic apagado (tachado)
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M15 10V4a3 3 0 00-5.995-.176M9 10v1a3 3 0 005.197 2.03M5 10a7 7 0 0011.657 4.657M5 5l14 14"
+      />
+    )}
+  </svg>
+</button>
+
 
               {/* Cámara */}
               <button className="w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 grid place-items-center transition-colors">
@@ -1330,11 +1372,17 @@ const handleCopyMeetingCode = async () => {
           </div>
         )}
 
-        
       </div>
     </div>
   </div>
 )}
+
+{/* Audio remoto de otros participantes (siempre montado) */}
+      <div className="fixed bottom-2 right-2 z-50 bg-slate-900/80 border border-slate-700 rounded-lg p-2 flex flex-col gap-1 max-h-40 overflow-y-auto">
+        {remoteStreams.map((remote) => (
+          <RemoteAudio key={remote.userId} stream={remote.stream} />
+        ))}
+      </div>
  </div>
   );
 }
