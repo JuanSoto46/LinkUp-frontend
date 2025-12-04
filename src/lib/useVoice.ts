@@ -71,10 +71,14 @@ export function useVoice({ meetingId, userId }: UseVoiceOptions): UseVoiceReturn
         setLocalStream(stream);
         (window as any).__voiceLocalStream = stream;
 
-        // 2) Conectar Socket.IO al servidor de voz (4002)
-        const socket = io(import.meta.env.VITE_VOICE_SOCKET_URL as string, {
+        const voiceUrl = import.meta.env.VITE_VOICE_SERVER_URL;
+
+        console.log("[voice-hook] 🔧 Using voice server:", voiceUrl);
+
+        const socket = io(voiceUrl, {
           transports: ["websocket"],
         });
+
 
         socketRef.current = socket;
 
@@ -98,21 +102,26 @@ export function useVoice({ meetingId, userId }: UseVoiceOptions): UseVoiceReturn
         const peerId = `${userId}-${Date.now()}`;
         console.log("[voice-hook] 🔗 Creating PeerJS instance with ID:", peerId);
 
+        const peerHost = import.meta.env.VITE_PEER_HOST;
+        const peerPort = import.meta.env.VITE_PEER_PORT;
+        const peerSecure = import.meta.env.VITE_PEER_SECURE === "true";
+
+        console.log("[voice-hook] 🔧 Peer connection:", { peerHost, peerPort, peerSecure });
+
         const peer = new Peer(peerId, {
-          host: import.meta.env.VITE_PEER_HOST as string,
-          port: Number(import.meta.env.VITE_PEER_PORT),
-          path: "/peerjs",
-          secure: import.meta.env.VITE_PEER_SECURE === "true",
+          host: peerHost,
+          port: peerPort ? Number(peerPort) : undefined, // si viene vacío usa 443
+          path: import.meta.env.VITE_PEER_PATH || "/peerjs",
+          secure: peerSecure,
           config: {
             iceServers: [
               {
-                urls: [
-                  `stun:${import.meta.env.VITE_STUN_HOST}:${import.meta.env.VITE_STUN_PORT}`,
-                ],
+                urls: [`stun:${import.meta.env.VITE_STUN_HOST}:${import.meta.env.VITE_STUN_PORT}`],
               },
-            ],
-          },
-        });
+          ],
+       },
+    });
+
 
         peerRef.current = peer;
 
