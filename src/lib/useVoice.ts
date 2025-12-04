@@ -76,6 +76,8 @@ export function useVoice({ meetingId, userId }: UseVoiceOptions): UseVoiceReturn
 
         const socket = io(voiceUrl, {
           withCredentials: false,
+          transports: ["polling"],
+          upgrade: false,
           // NO forzamos solo websocket
         });
 
