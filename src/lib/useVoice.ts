@@ -20,11 +20,6 @@ type UseVoiceReturn = {
   toggleMic: () => void;
 };
 
-/**
- * Hook para voz en tiempo real usando:
- * - Socket.IO (para coordinar sala / quién entra / quién sale)
- * - PeerJS (para el audio P2P entre navegadores)
- */
 export function useVoice({ meetingId, userId }: UseVoiceOptions): UseVoiceReturn {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteStream[]>([]);
@@ -52,7 +47,7 @@ export function useVoice({ meetingId, userId }: UseVoiceOptions): UseVoiceReturn
 
     async function initVoice() {
       try {
-        // 1) Pedir micrófono
+        // 1) Micrófono
         console.log("[voice-hook] 🎤 Requesting microphone permission...");
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
@@ -71,14 +66,18 @@ export function useVoice({ meetingId, userId }: UseVoiceOptions): UseVoiceReturn
         setLocalStream(stream);
         (window as any).__voiceLocalStream = stream;
 
-        const voiceUrl = import.meta.env.VITE_VOICE_SERVER_URL;
+        // 2) URL del servidor de voz (fallback local)
+        const isProd = import.meta.env.PROD;
+        const voiceUrl =
+          import.meta.env.VITE_VOICE_SERVER_URL ||
+          (isProd ? "" : "http://localhost:4002");
 
         console.log("[voice-hook] 🔧 Using voice server:", voiceUrl);
 
         const socket = io(voiceUrl, {
-          transports: ["websocket"],
+          withCredentials: false,
+          // NO forzamos solo websocket
         });
-
 
         socketRef.current = socket;
 
@@ -98,37 +97,62 @@ export function useVoice({ meetingId, userId }: UseVoiceOptions): UseVoiceReturn
           console.log("[voice-hook] ✅ Voice server acknowledged connection:", payload);
         });
 
-        // 3) Crear instancia de PeerJS apuntando al peer-server (4003)
+        // 3) PeerJS
         const peerId = `${userId}-${Date.now()}`;
+        const stunHost = import.meta.env.VITE_STUN_HOST;
+        const stunPort = import.meta.env.VITE_STUN_PORT;
+
+        let peerHost: string;
+        let peerPort: number | undefined;
+        let peerSecure: boolean;
+        let peerPath: string;
+
+        if (isProd) {
+          peerHost = import.meta.env.VITE_PEER_HOST || "linkup-voice-server.onrender.com";
+          peerPath = import.meta.env.VITE_PEER_PATH || "/peerjs";
+          peerSecure = (import.meta.env.VITE_PEER_SECURE || "true") === "true";
+          const rawPort = import.meta.env.VITE_PEER_PORT;
+          peerPort = rawPort ? Number(rawPort) : undefined; // con secure => 443 por defecto
+        } else {
+          // Local: lo que tenías antes
+          peerHost = "localhost";
+          peerPort = 4003;
+          peerPath = "/peerjs";
+          peerSecure = false;
+        }
+
         console.log("[voice-hook] 🔗 Creating PeerJS instance with ID:", peerId);
-
-        const peerHost = import.meta.env.VITE_PEER_HOST;
-        const peerPort = import.meta.env.VITE_PEER_PORT;
-        const peerSecure = import.meta.env.VITE_PEER_SECURE === "true";
-
-        console.log("[voice-hook] 🔧 Peer connection:", { peerHost, peerPort, peerSecure });
+        console.log("[voice-hook] 🔧 Peer connection:", {
+          peerHost,
+          peerPort,
+          peerSecure,
+          peerPath,
+          stunHost,
+          stunPort,
+        });
 
         const peer = new Peer(peerId, {
           host: peerHost,
-          port: peerPort ? Number(peerPort) : undefined, // si viene vacío usa 443
-          path: import.meta.env.VITE_PEER_PATH || "/peerjs",
+          port: peerPort,
+          path: peerPath,
           secure: peerSecure,
           config: {
             iceServers: [
               {
-                urls: [`stun:${import.meta.env.VITE_STUN_HOST}:${import.meta.env.VITE_STUN_PORT}`],
+                urls:
+                  stunHost && stunPort
+                    ? [`stun:${stunHost}:${stunPort}`]
+                    : ["stun:stun.l.google.com:19302"],
               },
-          ],
-       },
-    });
-
+            ],
+          },
+        });
 
         peerRef.current = peer;
 
         peer.on("open", (id) => {
           console.log("[voice-hook] ✅ Peer open:", id);
 
-          // Anunciarse en la sala de voz
           socket.emit("voice:join-room", {
             meetingId,
             userId,
@@ -144,7 +168,7 @@ export function useVoice({ meetingId, userId }: UseVoiceOptions): UseVoiceReturn
           console.warn("[voice-hook] ⚠️ Peer closed");
         });
 
-        // 4) Cuando alguien ME llama (entrante)
+        // 4) Llamadas entrantes
         peer.on("call", (call: MediaConnection) => {
           console.log("[voice-hook] 📞 Incoming call from", call.peer);
           const myStream = localStreamRef.current;
@@ -185,7 +209,7 @@ export function useVoice({ meetingId, userId }: UseVoiceOptions): UseVoiceReturn
           callsRef.current.set(call.peer, call);
         });
 
-        // 5) Cuando el servidor avisa que OTRO usuario se unió
+        // 5) Otro usuario se une
         socket.on(
           "voice:user-joined",
           ({ userId: remoteUserId, peerId }: { userId: string; peerId: string }) => {
@@ -204,7 +228,6 @@ export function useVoice({ meetingId, userId }: UseVoiceOptions): UseVoiceReturn
               return;
             }
 
-            // Evitar duplicados
             if (callsRef.current.has(peerId)) {
               console.log(
                 "[voice-hook] Call to this peer already exists, skipping",
@@ -257,7 +280,7 @@ export function useVoice({ meetingId, userId }: UseVoiceOptions): UseVoiceReturn
           }
         );
 
-        // 6) Cuando alguien sale de la sala
+        // 6) Usuario sale
         socket.on("voice:user-left", ({ peerId }: { peerId: string }) => {
           console.log("[voice-hook] 👋 voice:user-left", { peerId });
 
