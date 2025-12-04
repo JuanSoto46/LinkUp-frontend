@@ -131,7 +131,7 @@ export default function Footer() {
         <div className="border-t border-gray-800 mt-6 pt-4 text-center">
           <p className="text-gray-400 text-[11px]">
             © {currentYear} LinkUp. Prototipo educativo de
-            plataforma de videoconferencia · Sprint 2.
+            plataforma de videoconferencia · Sprint 3.
           </p>
         </div>
       </div>
