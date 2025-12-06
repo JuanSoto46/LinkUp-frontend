@@ -5,6 +5,8 @@ import { api } from "../lib/api";
 import { socketService } from "../lib/socket";
 import { useCallUi } from "../context/CallUiContext";
 import { useVoice } from "../lib/useVoice";
+import { useActiveSpeaker } from "../lib/useActiveSpeaker";
+
 
 
 
@@ -96,6 +98,15 @@ export default function Call() {
     meetingId: meetingId || "",
     userId: stableUserId
   });
+
+  
+    const { activeSpeakerId, speakingUserIds } = useActiveSpeaker({
+    localUserId: stableUserId,
+    localStream,
+    remoteStreams,
+    threshold: 0.08,
+  });
+
 
 
 
@@ -566,7 +577,14 @@ const handleCopyMeetingCode = async () => {
             <div className="flex-1 bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl border border-slate-700/80 flex items-center justify-center mb-3 lg:mb-4 min-h-0 relative overflow-hidden">
               <div className="absolute inset-0 pointer-events-none opacity-40 bg-[radial-gradient(circle_at_10%_20%,rgba(56,189,248,0.15)_0,transparent_55%),radial-gradient(circle_at_80%_0,rgba(129,140,248,0.18)_0,transparent_55%)]" />
               <div className="relative text-center">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 grid place-items-center text-xl font-semibold text-slate-950 mx-auto mb-3 shadow-lg shadow-emerald-500/30">
+                <div className={`w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 grid place-items-center text-xl font-semibold text-slate-950 mx-auto mb-3 shadow-lg shadow-emerald-500/30 transition-all duration-150 ${
+                      activeSpeakerId === stableUserId
+                        ? "ring-4 ring-emerald-400 scale-[1.05]"
+                        : speakingUserIds.has(stableUserId)
+                        ? "ring-2 ring-emerald-400/80"
+                        : ""
+                    }`}
+                  >
                   {getUserInitials()}
                 </div>
                 <p className="text-slate-200 text-sm">
@@ -628,7 +646,14 @@ const handleCopyMeetingCode = async () => {
                 {participants.map((participant) => (
                   <div
                     key={participant.socketId}
-                    className="rounded-xl bg-slate-800/80 border border-slate-700/90 p-2 flex flex-col items-center justify-center shadow-sm h-24"
+                         className={`rounded-xl bg-slate-800/80 border border-slate-700/90 p-2 flex flex-col items-center justify-center shadow-sm h-24 transition-all duration-150 ${
+                          activeSpeakerId === participant.userId
+                            ? "ring-4 ring-emerald-400 shadow-emerald-500/40 scale-[1.03]"
+                            : speakingUserIds.has(participant.userId)
+                            ? "ring-2 ring-emerald-400/80 shadow-emerald-500/30"
+                            : ""
+                        }`}
+
                   >
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 grid place-items-center text-xs font-semibold text-white shadow-md shadow-blue-500/30">
                       {getUserInitials(participant.displayName)}
@@ -820,7 +845,14 @@ const handleCopyMeetingCode = async () => {
                       return (
                         <div
                           key={participant.socketId}
-                          className="flex items-center gap-3 px-2 py-2 rounded-lg bg-slate-800/80 border border-slate-700/80 shadow-sm"
+                                className={`flex items-center gap-3 px-2 py-2 rounded-lg bg-slate-800/80 border border-slate-700/80 shadow-sm transition-all duration-150 ${
+                              activeSpeakerId === participant.userId
+                                ? "ring-2 ring-emerald-400 bg-slate-800"
+                                : speakingUserIds.has(participant.userId)
+                                ? "ring-1 ring-emerald-400/70"
+                                : ""
+                            }`}
+
                         >
                           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 grid place-items-center text-xs font-semibold text-slate-950">
                             {getUserInitials(
