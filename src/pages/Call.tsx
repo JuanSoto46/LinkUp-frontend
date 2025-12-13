@@ -4,7 +4,7 @@ import { auth } from "../lib/firebase";
 import { api } from "../lib/api";
 import { socketService } from "../lib/socket";
 import { useCallUi } from "../context/CallUiContext";
-import { useVoice } from "../lib/useVoice";
+import { useMedia } from "../lib/useMedia";
 import { useActiveSpeaker } from "../lib/useActiveSpeaker";
 
 
@@ -49,6 +49,93 @@ function RemoteAudio({ stream }: { stream: MediaStream }) {
   return <audio ref={audioRef} autoPlay />;
 }
 
+
+
+function RemoteVideo({ stream, userId, isCameraEnabled = true }: { stream: MediaStream; userId: string; isCameraEnabled?: boolean }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [isVideoActive, setIsVideoActive] = useState(true);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+
+      const videoTrack = stream.getVideoTracks()[0];
+
+      const playVideo = async () => {
+        try {
+          if (videoRef.current && videoRef.current.paused) {
+            await videoRef.current.play();
+          }
+        } catch (err) { }
+      };
+
+      playVideo();
+
+      if (videoTrack) {
+        const checkStatus = (source?: string) => {
+          // Lógica híbrida: Servidor + Track
+          const trackOk = videoTrack.enabled && !videoTrack.muted && videoTrack.readyState === 'live';
+          const isActive = isCameraEnabled && trackOk;
+
+          console.log(`[RemoteVideo] ${userId} Check (${source}):`, {
+            serverEnabled: isCameraEnabled,
+            trackOk,
+            isActive
+          });
+
+          setIsVideoActive(isActive);
+          if (isActive) playVideo();
+        };
+
+        checkStatus('update');
+
+        const handler = () => checkStatus('track-event');
+        videoTrack.addEventListener('mute', handler);
+        videoTrack.addEventListener('unmute', handler);
+        videoTrack.addEventListener('ended', handler);
+
+        return () => {
+          videoTrack.removeEventListener('mute', handler);
+          videoTrack.removeEventListener('unmute', handler);
+          videoTrack.removeEventListener('ended', handler);
+        };
+      }
+    }
+  }, [stream, userId, isCameraEnabled]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (stream) {
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) {
+          const trackOk = videoTrack.enabled && !videoTrack.muted && videoTrack.readyState === 'live';
+          const isActive = isCameraEnabled && trackOk;
+
+          setIsVideoActive(prev => {
+            if (prev !== isActive) return isActive;
+            return prev;
+          });
+        }
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [stream, isCameraEnabled]);
+
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      className={`absolute inset-0 w-full h-full object-cover rounded-xl transition-all duration-300 ${isVideoActive ? 'opacity-100' : 'opacity-0 hidden'
+        }`}
+    />
+  );
+}
+
+
+
+
+
 /**
  * Call page component.
  * Layout de llamada + participantes + chat.
@@ -87,20 +174,44 @@ export default function Call() {
   // Info de la llamada / enlace compartible
   const [showCallInfo, setShowCallInfo] = useState(false);
   const [shareLink, setShareLink] = useState("");
-  
+
   const { setActiveCall, setMinimized } = useCallUi();
 
   const [showEndCallConfirm, setShowEndCallConfirm] = useState(false);
 
-    // ---- VOZ EN TIEMPO REAL ----
+
+  // ---- AUDIO + VIDEO  ----
   const stableUserId = user?.uid || auth.currentUser?.uid || "";
-  const { localStream, remoteStreams, isMicEnabled, toggleMic } = useVoice({
+  const {
+    localStream,
+    remoteStreams,
+    remotePeerStates, 
+    isMicEnabled,
+    isCameraEnabled,
+    toggleMic,
+    toggleCamera
+  } = useMedia({
     meetingId: meetingId || "",
     userId: stableUserId
   });
 
-  
-    const { activeSpeakerId, speakingUserIds } = useActiveSpeaker({
+  // Local video ref
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Attach local stream to <video> element (now contains audio and video)
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+      console.log('📹 Local media stream (audio+video) attached', { isCameraEnabled });
+
+      // Asegurar que el video se reproduce
+      localVideoRef.current.play().catch(err => {
+        console.warn('Error auto-playing video:', err);
+      });
+    }
+  }, [localStream, isCameraEnabled]);
+
+  const { activeSpeakerId, speakingUserIds } = useActiveSpeaker({
     localUserId: stableUserId,
     localStream,
     remoteStreams,
@@ -220,33 +331,33 @@ export default function Call() {
       });
 
       socketService.onMeetingJoined((data) => {
-  console.log("✅ Joined meeting:", data);
-  setIsConnected(true);
-  setSocketError(null);
+        console.log("✅ Joined meeting:", data);
+        setIsConnected(true);
+        setSocketError(null);
 
-  if (data.participants) {
-    const uniqueParticipants = Array.from(
-      new Map(data.participants.map((p: any) => [p.userId, p])).values()
-    );
-    setParticipants(uniqueParticipants);
-  }
+        if (data.participants) {
+          const uniqueParticipants = Array.from(
+            new Map(data.participants.map((p: any) => [p.userId, p])).values()
+          );
+          setParticipants(uniqueParticipants);
+        }
 
         const welcomeMessage: ChatMessage = {
-    id: `system-${Date.now()}-${Math.random()}`,
-    userId: "system",
-    displayName: "Sistema",
-    message: `Te has unido a "${data.meetingTitle}"`,
-    type: "system",
-    timestamp: new Date().toISOString(),
-  };
-  setChatMessages([welcomeMessage]);
+          id: `system-${Date.now()}-${Math.random()}`,
+          userId: "system",
+          displayName: "Sistema",
+          message: `Te has unido a "${data.meetingTitle}"`,
+          type: "system",
+          timestamp: new Date().toISOString(),
+        };
+        setChatMessages([welcomeMessage]);
 
-  setActiveCall({
-    meetingId: meetingId!,
-    title: data.meetingTitle || meeting?.title || "Reunión sin título",
-  });
-  setMinimized(false);
-});
+        setActiveCall({
+          meetingId: meetingId!,
+          title: data.meetingTitle || meeting?.title || "Reunión sin título",
+        });
+        setMinimized(false);
+      });
 
       console.log(" Joining meeting:", meetingId);
       await socketService.joinMeeting(meetingId!);
@@ -341,10 +452,10 @@ export default function Call() {
   };
 
   const handleEndCall = () => {
-      socketService.disconnect();
-      setActiveCall(null);      
-      setMinimized(false); 
-      navigate("/meetings");
+    socketService.disconnect();
+    setActiveCall(null);
+    setMinimized(false);
+    navigate("/meetings");
   };
 
   const handleRetryConnection = () => {
@@ -360,28 +471,28 @@ export default function Call() {
   };
 
   const formatDateTime = (iso?: string) => {
-  if (!iso) return "N/D";
-  return new Date(iso).toLocaleString();
-};
+    if (!iso) return "N/D";
+    return new Date(iso).toLocaleString();
+  };
 
-const getDisplayMeetingCode = () => {
-  if (!meetingId) return "N/D";
-  const clean = meetingId.replace(/[^a-zA-Z0-9]/g, "");
-  if (clean.length <= 8) return clean.toUpperCase();
-  const short = clean.slice(-8).toUpperCase(); // últimos 8
-  return short.replace(/(.{4})/g, "$1-").replace(/-$/, "");
-};
+  const getDisplayMeetingCode = () => {
+    if (!meetingId) return "N/D";
+    const clean = meetingId.replace(/[^a-zA-Z0-9]/g, "");
+    if (clean.length <= 8) return clean.toUpperCase();
+    const short = clean.slice(-8).toUpperCase(); // últimos 8
+    return short.replace(/(.{4})/g, "$1-").replace(/-$/, "");
+  };
 
-const handleCopyMeetingCode = async () => {
-  if (!meetingId) return;
-  try {
-    await navigator.clipboard.writeText(meetingId);
-    alert("Código de reunión copiado al portapapeles");
-  } catch (err) {
-    console.error("Error al copiar código", err);
-    alert("No se pudo copiar el código. Copia el texto manualmente.");
-  }
-};
+  const handleCopyMeetingCode = async () => {
+    if (!meetingId) return;
+    try {
+      await navigator.clipboard.writeText(meetingId);
+      alert("Código de reunión copiado al portapapeles");
+    } catch (err) {
+      console.error("Error al copiar código", err);
+      alert("No se pudo copiar el código. Copia el texto manualmente.");
+    }
+  };
 
 
   const handleCopyLink = async () => {
@@ -442,13 +553,12 @@ const handleCopyMeetingCode = async () => {
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex items-center gap-2">
               <div
-                className={`w-7 h-7 rounded-full grid place-items-center shadow-inner ${
-                  isConnected
-                    ? "bg-emerald-500"
-                    : socketError
+                className={`w-7 h-7 rounded-full grid place-items-center shadow-inner ${isConnected
+                  ? "bg-emerald-500"
+                  : socketError
                     ? "bg-red-500"
                     : "bg-yellow-500"
-                }`}
+                  }`}
               >
                 <svg
                   className="w-3.5 h-3.5 text-white"
@@ -469,8 +579,8 @@ const handleCopyMeetingCode = async () => {
                   {isConnected
                     ? "En reunión"
                     : socketError
-                    ? "Error de conexión"
-                    : "Conectando..."}
+                      ? "Error de conexión"
+                      : "Conectando..."}
                 </span>
                 {socketError && (
                   <button
@@ -542,27 +652,27 @@ const handleCopyMeetingCode = async () => {
             </button>
 
             <button
-  onClick={() => {
-    setMinimized(true);      
-    navigate("/meetings");   
-  }}
-  className="flex items-center gap-2 px-3 py-1 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 transition-colors text-xs sm:text-sm"
->
-  <svg
-    className="w-4 h-4"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M10 19l-7-7m0 0l7-7m-7 7h18"
-    />
-  </svg>
-  <span className="hidden sm:inline">Salir</span>
-</button>
+              onClick={() => {
+                setMinimized(true);
+                navigate("/meetings");
+              }}
+              className="flex items-center gap-2 px-3 py-1 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 transition-colors text-xs sm:text-sm"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                />
+              </svg>
+              <span className="hidden sm:inline">Salir</span>
+            </button>
 
           </div>
         </div>
@@ -574,111 +684,216 @@ const handleCopyMeetingCode = async () => {
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="bg-slate-900 rounded-xl border border-slate-700 p-3 lg:p-4 flex-1 flex flex-col min-h-0 overflow-hidden shadow-[0_0_0_1px_rgba(15,23,42,0.6)]">
             {/* Video principal */}
-            <div className="flex-1 bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl border border-slate-700/80 flex items-center justify-center mb-3 lg:mb-4 min-h-0 relative overflow-hidden">
-              <div className="absolute inset-0 pointer-events-none opacity-40 bg-[radial-gradient(circle_at_10%_20%,rgba(56,189,248,0.15)_0,transparent_55%),radial-gradient(circle_at_80%_0,rgba(129,140,248,0.18)_0,transparent_55%)]" />
-              <div className="relative text-center">
-                <div className={`w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 grid place-items-center text-xl font-semibold text-slate-950 mx-auto mb-3 shadow-lg shadow-emerald-500/30 transition-all duration-150 ${
-                      activeSpeakerId === stableUserId
-                        ? "ring-4 ring-emerald-400 scale-[1.05]"
-                        : speakingUserIds.has(stableUserId)
-                        ? "ring-2 ring-emerald-400/80"
-                        : ""
-                    }`}
-                  >
-                  {getUserInitials()}
-                </div>
-                <p className="text-slate-200 text-sm">
-                </p>
-                <p
-                  className={`text-xs mt-1 flex items-center justify-center gap-1 ${
-                    isConnected ? "text-emerald-400" : "text-yellow-300"
-                  }`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-current" />
-                  <span>
-                    {isConnected ? "Conectado" : "Conectando..."}
-                  </span>
-                </p>
-              </div>
-            </div>
+            <div className="flex-1 overflow-y-auto mb-3">
+              <div className={`grid gap-3 h-full ${participants.length === 0 ? 'grid-cols-1' :
+                participants.length === 1 ? 'grid-cols-1 md:grid-cols-2' :
+                  participants.length === 2 ? 'grid-cols-1 md:grid-cols-2' :
+                    participants.length === 3 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
+                      'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                }`}>
 
-            {/* Botones panel lateral escritorio */}
-            <div className="hidden lg:flex justify-end gap-2 mb-3">
-              <button
-                type="button"
-                onClick={() =>
-                  setShowParticipantsPanel((prev) => !prev)
-                }
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                  showParticipantsPanel
-                    ? "bg-slate-100 text-slate-900 border-slate-100"
-                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700"
-                }`}
-              >
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span>Participantes</span>
-              </button>
+                {/* Participantes remotos */}
+                {participants.map((participant) => {
+                  const isLocal = participant.userId === stableUserId;
 
-              <button
-                type="button"
-                onClick={() =>
-                  setShowChatPanel((prev) => !prev)
-                }
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                  showChatPanel
-                    ? "bg-blue-500 text-white border-blue-500"
-                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700"
-                }`}
-              >
-                <span className="w-2 h-2 rounded-full bg-blue-400" />
-                <span>Chat</span>
-              </button>
-            </div>
+                  // Buscar stream remoto si no es local
+                  const participantStream = !isLocal
+                    ? remoteStreams.find((rs: any) => rs.userId === participant.userId)
+                    : null;
 
-            {/* Recuadros de participantes abajo */}
-            <div className="mb-3 lg:mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-semibold text-slate-200">
-                  Participantes ({participants.length})
-                </h3>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 max-h-32 overflow-y-auto">
-                {participants.map((participant) => (
-                  <div
-                    key={participant.socketId}
-                         className={`rounded-xl bg-slate-800/80 border border-slate-700/90 p-2 flex flex-col items-center justify-center shadow-sm h-24 transition-all duration-150 ${
-                          activeSpeakerId === participant.userId
-                            ? "ring-4 ring-emerald-400 shadow-emerald-500/40 scale-[1.03]"
-                            : speakingUserIds.has(participant.userId)
-                            ? "ring-2 ring-emerald-400/80 shadow-emerald-500/30"
-                            : ""
+                  const remoteState = remotePeerStates[participant.userId];
+                  const isRemoteCamOn = remoteState?.isCameraEnabled ?? true;
+
+                  if (participantStream) {
+                    console.log(`[Call render] ${participant.userId} cam state: ${isRemoteCamOn}`);
+                  }
+
+                  return (
+                    <div
+                      key={participant.socketId}
+                      className={`rounded-xl bg-slate-800/80 border border-slate-700/90 p-3 flex flex-col items-center justify-center shadow-sm relative overflow-hidden transition-all duration-150 ${activeSpeakerId === participant.userId
+                        ? "ring-4 ring-emerald-400 shadow-emerald-500/40"
+                        : speakingUserIds.has(participant.userId)
+                          ? "ring-2 ring-emerald-400/80 shadow-emerald-500/30"
+                          : ""
                         }`}
+                      style={{ minHeight: '300px' }}
+                    >
+                      {/* Avatar de fondo (visible cuando no hay video) */}
+                      <div className="flex flex-col items-center justify-center">
+                        <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${isLocal ? 'from-emerald-400 to-cyan-500' : 'from-blue-500 to-indigo-500'} grid place-items-center text-2xl font-semibold ${isLocal ? 'text-slate-950' : 'text-white'} shadow-md shadow-blue-500/30`}>
+                          {getUserInitials(participant.displayName || (isLocal ? user?.displayName : "?"))}
+                        </div>
+                      </div>
 
-                  >
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 grid place-items-center text-xs font-semibold text-white shadow-md shadow-blue-500/30">
-                      {getUserInitials(participant.displayName)}
+                      {/* Video Logic */}
+                      {isLocal ? (
+                        // Local user video
+                        <video
+                          ref={localVideoRef}
+                          autoPlay
+                          muted
+                          playsInline
+                          className={`absolute inset-0 w-full h-full object-cover rounded-xl transition-all duration-300 ${isCameraEnabled && localStream ? 'opacity-100' : 'opacity-0 hidden'
+                            }`}
+                        />
+                      ) : (
+                        // Remote user video
+                        participantStream && isRemoteCamOn && (
+                          <RemoteVideo
+                            stream={participantStream.stream}
+                            userId={participant.userId}
+                            isCameraEnabled={true}
+                          />
+                        )
+                      )}
+
+                      {/* Participant Info */}
+                      <div className="absolute bottom-3 left-3 right-3 bg-slate-900/90 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-700 z-10">
+                        <p className="text-sm font-medium text-slate-100 truncate">
+                          {participant.displayName} {isLocal && <span className="text-xs text-slate-400">(Tú)</span>}
+                        </p>
+
+                        {isLocal && !isCameraEnabled ? (
+                          <p className="text-xs text-red-400 flex items-center gap-1 mt-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                            <span>Cámara apagada</span>
+                          </p>
+                        ) : (
+                          <p className="text-xs text-emerald-400 flex items-center gap-1 mt-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <span>En línea</span>
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <p className="mt-1 text-[11px] font-medium text-slate-100 truncate w-full text-center">
-                      {participant.displayName}
-                    </p>
-                    <p className="mt-0.5 text-[10px] text-emerald-400 flex items-center justify-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-[2px] bg-emerald-400" />
-                      <span>En línea</span>
-                    </p>
-                  </div>
-                ))}
-                {participants.length === 0 && (
-                  <div className="col-span-full text-xs text-slate-500 italic">
-                    Aún no hay otros participantes conectados.
-                  </div>
-                )}
+                  );
+                })}
               </div>
             </div>
 
-            {/* Controles: micrófono + info llamada + cámara + colgar */}
+            {/* Controls: mic, camera, participants, chat and  end call */}
             <div className="flex justify-center items-center gap-3 pt-2 border-t border-slate-700 flex-shrink-0">
-              
-              {/* Botón tres puntos: info llamada */}
+
+              {/* Mic  */}
+              <button
+                type="button"
+                onClick={toggleMic}
+                className={`w-10 h-10 rounded-full grid place-items-center transition-colors ${isMicEnabled
+                  ? "bg-slate-700 hover:bg-slate-600"
+                  : "bg-red-700 hover:bg-red-600"
+                  }`}
+              >
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  {isMicEnabled ? (
+                    // mic on
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 1a3 3 0 00-3 3v6a3 3 0 106 0V4a3 3 0 00-3-3zM5 10a7 7 0 0014 0M12 17v4m0 0H9m3 0h3"
+                    />
+                  ) : (
+                    // mic off
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 10V4a3 3 0 00-5.995-.176M9 10v1a3 3 0 005.197 2.03M5 10a7 7 0 0011.657 4.657M5 5l14 14"
+                    />
+                  )}
+                </svg>
+              </button>
+
+
+              {/* camera */}
+              <button
+                type="button"
+                onClick={toggleCamera}
+                className={`w-10 h-10 rounded-full grid place-items-center transition-colors ${isCameraEnabled
+                  ? "bg-slate-700 hover:bg-slate-600"
+                  : "bg-red-700 hover:bg-red-600"
+                  }`}
+              >
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  {isCameraEnabled ? (
+                    // camera on
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  ) : (
+                    // camera off
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2zM3 3l18 18"
+                    />
+                  )}
+                </svg>
+              </button>
+              {/* participants */}
+              <button
+                type="button"
+                onClick={() => setShowParticipantsPanel((prev) => !prev)}
+                className={`w-10 h-10 rounded-full grid place-items-center transition-colors ${showParticipantsPanel
+                  ? "bg-emerald-600 hover:bg-emerald-500"
+                  : "bg-slate-700 hover:bg-slate-600"
+                  }`}
+              >
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M9 11a4 4 0 100-8 4 4 0 000 8zm0 0c-4.418 0-8 2.239-8 5v2h8m6-9a3 3 0 110-6 3 3 0 010 6z"
+                  />
+                </svg>
+              </button>
+
+              {/* Chat */}
+              <button
+                type="button"
+                onClick={() => setShowChatPanel((prev) => !prev)}
+                className={`w-10 h-10 rounded-full grid place-items-center transition-colors ${showChatPanel
+                  ? "bg-blue-600 hover:bg-blue-500"
+                  : "bg-slate-700 hover:bg-slate-600"
+                  }`}
+              >
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 3.582-8 8-8s8 3.582 8 8z"
+                  />
+                </svg>
+              </button>
+
+              {/* Info call (dots) */}
               <button
                 type="button"
                 onClick={() => setShowCallInfo(true)}
@@ -698,46 +913,12 @@ const handleCopyMeetingCode = async () => {
                   />
                 </svg>
               </button>
-              
-              {/* Mic (voz en tiempo real) */}
-<button
-  type="button"
-  onClick={toggleMic}
-  className={`w-10 h-10 rounded-full grid place-items-center transition-colors ${
-    isMicEnabled
-      ? "bg-slate-700 hover:bg-slate-600"
-      : "bg-red-700 hover:bg-red-600"
-  }`}
->
-  <svg
-    className="w-5 h-5 text-white"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    {isMicEnabled ? (
-      // mic encendido
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 1a3 3 0 00-3 3v6a3 3 0 106 0V4a3 3 0 00-3-3zM5 10a7 7 0 0014 0M12 17v4m0 0H9m3 0h3"
-      />
-    ) : (
-      // mic apagado (tachado)
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M15 10V4a3 3 0 00-5.995-.176M9 10v1a3 3 0 005.197 2.03M5 10a7 7 0 0011.657 4.657M5 5l14 14"
-      />
-    )}
-  </svg>
-</button>
 
-
-              {/* Cámara */}
-              <button className="w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 grid place-items-center transition-colors">
+              {/* End call */}
+              <button
+                onClick={() => setShowEndCallConfirm(true)}
+                className="w-10 h-10 rounded-full bg-red-600 hover:bg-red-500 grid place-items-center transition-colors"
+              >
                 <svg
                   className="w-5 h-5 text-white"
                   fill="none"
@@ -748,30 +929,10 @@ const handleCopyMeetingCode = async () => {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    d="M6 18L18 6M6 6l12 12"
                   />
                 </svg>
               </button>
-
-              {/* Colgar */}
-              <button
-  onClick={() => setShowEndCallConfirm(true)}
-  className="w-10 h-10 rounded-full bg-red-600 hover:bg-red-500 grid place-items-center transition-colors"
->
-  <svg
-    className="w-5 h-5 text-white"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M6 18L18 6M6 6l12 12"
-    />
-  </svg>
-</button>
 
             </div>
           </div>
@@ -799,9 +960,8 @@ const handleCopyMeetingCode = async () => {
             {/* PANEL PARTICIPANTES escritorio */}
             {showParticipantsPanel && (
               <div
-                className={`flex flex-col min-h-0 mb-3 ${
-                  bothPanelsOpen ? "flex-[0.45]" : "flex-1"
-                }`}
+                className={`flex flex-col min-h-0 mb-3 ${bothPanelsOpen ? "flex-[0.45]" : "flex-1"
+                  }`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -845,19 +1005,18 @@ const handleCopyMeetingCode = async () => {
                       return (
                         <div
                           key={participant.socketId}
-                                className={`flex items-center gap-3 px-2 py-2 rounded-lg bg-slate-800/80 border border-slate-700/80 shadow-sm transition-all duration-150 ${
-                              activeSpeakerId === participant.userId
-                                ? "ring-2 ring-emerald-400 bg-slate-800"
-                                : speakingUserIds.has(participant.userId)
-                                ? "ring-1 ring-emerald-400/70"
-                                : ""
+                          className={`flex items-center gap-3 px-2 py-2 rounded-lg bg-slate-800/80 border border-slate-700/80 shadow-sm transition-all duration-150 ${activeSpeakerId === participant.userId
+                            ? "ring-2 ring-emerald-400 bg-slate-800"
+                            : speakingUserIds.has(participant.userId)
+                              ? "ring-1 ring-emerald-400/70"
+                              : ""
                             }`}
 
                         >
                           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 grid place-items-center text-xs font-semibold text-slate-950">
                             {getUserInitials(
                               participant.displayName ||
-                                participant.email
+                              participant.email
                             )}
                           </div>
 
@@ -895,9 +1054,8 @@ const handleCopyMeetingCode = async () => {
             {/* PANEL CHAT escritorio */}
             {showChatPanel && (
               <div
-                className={`flex flex-col min-h-0 ${
-                  bothPanelsOpen ? "flex-[0.55]" : "flex-1"
-                }`}
+                className={`flex flex-col min-h-0 ${bothPanelsOpen ? "flex-[0.55]" : "flex-1"
+                  }`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -963,13 +1121,12 @@ const handleCopyMeetingCode = async () => {
                       <div key={msg.id} className="text-xs">
                         <div className="flex justify-between items-start mb-1">
                           <span
-                            className={`font-medium ${
-                              msg.userId === user?.uid
-                                ? "text-blue-400"
-                                : msg.type === "system"
+                            className={`font-medium ${msg.userId === user?.uid
+                              ? "text-blue-400"
+                              : msg.type === "system"
                                 ? "text-yellow-400"
                                 : "text-slate-200"
-                            }`}
+                              }`}
                           >
                             {msg.displayName}
                             {msg.userId === user?.uid && " (Tú)"}
@@ -979,13 +1136,12 @@ const handleCopyMeetingCode = async () => {
                           </span>
                         </div>
                         <p
-                          className={`text-slate-300 rounded-lg px-2.5 py-2 leading-snug ${
-                            msg.type === "system"
-                              ? "bg-yellow-900/20 italic"
-                              : msg.userId === user?.uid
+                          className={`text-slate-300 rounded-lg px-2.5 py-2 leading-snug ${msg.type === "system"
+                            ? "bg-yellow-900/20 italic"
+                            : msg.userId === user?.uid
                               ? "bg-blue-900/30"
                               : "bg-slate-800/60"
-                          }`}
+                            }`}
                         >
                           {msg.message}
                         </p>
@@ -1013,8 +1169,8 @@ const handleCopyMeetingCode = async () => {
                       !isConnected
                         ? "Conectando al chat..."
                         : socketError
-                        ? "Chat no disponible"
-                        : "Escribe un mensaje..."
+                          ? "Chat no disponible"
+                          : "Escribe un mensaje..."
                     }
                     disabled={!isConnected || !!socketError}
                     className="flex-1 rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-60"
@@ -1043,7 +1199,7 @@ const handleCopyMeetingCode = async () => {
                 </form>
               </div>
 
-              
+
 
             )}
           </div>
@@ -1192,13 +1348,12 @@ const handleCopyMeetingCode = async () => {
                       <div key={msg.id} className="text-xs">
                         <div className="flex justify-between items-start mb-1">
                           <span
-                            className={`font-medium ${
-                              msg.userId === user?.uid
-                                ? "text-blue-400"
-                                : msg.type === "system"
+                            className={`font-medium ${msg.userId === user?.uid
+                              ? "text-blue-400"
+                              : msg.type === "system"
                                 ? "text-yellow-400"
                                 : "text-slate-200"
-                            }`}
+                              }`}
                           >
                             {msg.displayName}
                             {msg.userId === user?.uid && " (Tú)"}
@@ -1208,13 +1363,12 @@ const handleCopyMeetingCode = async () => {
                           </span>
                         </div>
                         <p
-                          className={`text-slate-300 rounded-lg px-2.5 py-2 leading-snug ${
-                            msg.type === "system"
-                              ? "bg-yellow-900/20 italic"
-                              : msg.userId === user?.uid
+                          className={`text-slate-300 rounded-lg px-2.5 py-2 leading-snug ${msg.type === "system"
+                            ? "bg-yellow-900/20 italic"
+                            : msg.userId === user?.uid
                               ? "bg-blue-900/30"
                               : "bg-slate-800/60"
-                          }`}
+                            }`}
                         >
                           {msg.message}
                         </p>
@@ -1242,8 +1396,8 @@ const handleCopyMeetingCode = async () => {
                       !isConnected
                         ? "Conectando al chat..."
                         : socketError
-                        ? "Chat no disponible"
-                        : "Escribe un mensaje..."
+                          ? "Chat no disponible"
+                          : "Escribe un mensaje..."
                     }
                     disabled={!isConnected || !!socketError}
                     className="flex-1 rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-60"
@@ -1287,7 +1441,7 @@ const handleCopyMeetingCode = async () => {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 mb-3">
-             
+
               <div>
                 <h2 className="text-sm sm:text-base font-semibold text-slate-50">
                   Finalizar llamada
@@ -1322,99 +1476,99 @@ const handleCopyMeetingCode = async () => {
       )}
 
       {/* MODAL INFO DE LA LLAMADA */}
-{showCallInfo && (
-  <div
-    className="fixed inset-0 z-50 bg-slate-950/70 flex items-center justify-center px-4"
-    onClick={() => setShowCallInfo(false)}
-  >
-    <div
-      className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-4 sm:p-5 shadow-xl"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <p className="text-xs text-slate-400">Información de la llamada</p>
-          <h2 className="text-sm sm:text-base font-semibold text-slate-50">
-            {meeting?.title || "Reunión sin título"}
-          </h2>
-        </div>
-        <button
-          type="button"
+      {showCallInfo && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/70 flex items-center justify-center px-4"
           onClick={() => setShowCallInfo(false)}
-          className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 grid place-items-center text-slate-300 text-xs border border-slate-700"
         >
-          ✕
-        </button>
-      </div>
+          <div
+            className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-4 sm:p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-xs text-slate-400">Información de la llamada</p>
+                <h2 className="text-sm sm:text-base font-semibold text-slate-50">
+                  {meeting?.title || "Reunión sin título"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCallInfo(false)}
+                className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 grid place-items-center text-slate-300 text-xs border border-slate-700"
+              >
+                ✕
+              </button>
+            </div>
 
-      <div className="space-y-3 text-xs sm:text-sm">
-        <div className="flex items-center justify-between gap-2">
-  <span className="text-slate-400">Código de reunión</span>
+            <div className="space-y-3 text-xs sm:text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-400">Código de reunión</span>
 
-  <button
-    type="button"
-    onClick={handleCopyMeetingCode}
-    className="flex items-center gap-1 font-mono text-slate-100 text-[11px] bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700 hover:bg-slate-700 transition-colors"
-  >
-    <span>{meetingId || "N/D"}</span>
-    <svg
-      className="w-3.5 h-3.5 text-slate-200"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 16h8a2 2 0 002-2V7M8 16a2 2 0 01-2-2V7m2 9h8m-8 0l-2 2m10-11a2 2 0 00-2-2h-5m7 2V5a2 2 0 00-2-2h-5m0 0L7 5m3-2v3"
-      />
-    </svg>
-  </button>
-</div>
+                <button
+                  type="button"
+                  onClick={handleCopyMeetingCode}
+                  className="flex items-center gap-1 font-mono text-slate-100 text-[11px] bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700 hover:bg-slate-700 transition-colors"
+                >
+                  <span>{meetingId || "N/D"}</span>
+                  <svg
+                    className="w-3.5 h-3.5 text-slate-200"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 16h8a2 2 0 002-2V7M8 16a2 2 0 01-2-2V7m2 9h8m-8 0l-2 2m10-11a2 2 0 00-2-2h-5m7 2V5a2 2 0 00-2-2h-5m0 0L7 5m3-2v3"
+                    />
+                  </svg>
+                </button>
+              </div>
 
 
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-slate-400">Participantes actuales</span>
-          <span className="text-slate-100">
-            {participants.length} en la llamada
-          </span>
-        </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-400">Participantes actuales</span>
+                <span className="text-slate-100">
+                  {participants.length} en la llamada
+                </span>
+              </div>
 
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-slate-400">Estado</span>
-          <span className="text-slate-100">
-            {meeting?.status || "N/D"}
-          </span>
-        </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-400">Estado</span>
+                <span className="text-slate-100">
+                  {meeting?.status || "N/D"}
+                </span>
+              </div>
 
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-slate-400">Creada</span>
-          <span className="text-slate-100">
-            {formatDateTime(meeting?.createdAt)}
-          </span>
-        </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-400">Creada</span>
+                <span className="text-slate-100">
+                  {formatDateTime(meeting?.createdAt)}
+                </span>
+              </div>
 
-        {meeting?.scheduledAt && (
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-slate-400">Programada para</span>
-            <span className="text-slate-100">
-              {formatDateTime(meeting.scheduledAt)}
-            </span>
+              {meeting?.scheduledAt && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-slate-400">Programada para</span>
+                  <span className="text-slate-100">
+                    {formatDateTime(meeting.scheduledAt)}
+                  </span>
+                </div>
+              )}
+
+            </div>
           </div>
-        )}
+        </div>
+      )}
 
-      </div>
-    </div>
-  </div>
-)}
-
-{/* Audio remoto de otros participantes (siempre montado) */}
+      {/* Audio remoto de otros participantes (siempre montado) */}
       <div className="fixed bottom-2 right-2 z-50 bg-slate-900/80 border border-slate-700 rounded-lg p-2 flex flex-col gap-1 max-h-40 overflow-y-auto">
         {remoteStreams.map((remote) => (
           <RemoteAudio key={remote.userId} stream={remote.stream} />
         ))}
       </div>
- </div>
+    </div>
   );
 }
