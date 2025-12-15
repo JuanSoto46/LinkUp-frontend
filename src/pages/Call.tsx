@@ -185,15 +185,48 @@ export default function Call() {
   const {
     localStream,
     remoteStreams,
-    remotePeerStates, 
+    remotePeerStates,
     isMicEnabled,
     isCameraEnabled,
     toggleMic,
-    toggleCamera
+    toggleCamera,
+    error: mediaError
   } = useMedia({
     meetingId: meetingId || "",
     userId: stableUserId
   });
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => setToastMessage(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
+  const handleToggleMic = () => {
+    if (mediaError) {
+      setToastMessage(`Error: ${mediaError}`);
+      return;
+    }
+    const success = toggleMic();
+    if (!success) {
+      
+      setToastMessage("No se pudo acceder al micrófono. Verifica los permisos.");
+    }
+  };
+
+  const handleToggleCamera = () => {
+    if (mediaError) {
+      setToastMessage(`Error: ${mediaError}`);
+      return;
+    }
+    const success = toggleCamera();
+    if (!success) {
+      setToastMessage("No se pudo acceder a la cámara. Verifica los permisos.");
+    }
+  };
 
   // Local video ref
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -686,11 +719,14 @@ export default function Call() {
             {/* Video principal */}
             <div className="flex-1 overflow-y-auto mb-3">
               <div className={`grid gap-3 h-full ${participants.length === 0 ? 'grid-cols-1' :
-                participants.length === 1 ? 'grid-cols-1 md:grid-cols-2' :
+                participants.length === 1 ? 'grid-cols-1 md:grid-cols-2 ' :
                   participants.length === 2 ? 'grid-cols-1 md:grid-cols-2' :
                     participants.length === 3 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
                       'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
                 }`}>
+
+
+
 
                 {/* Participantes remotos */}
                 {participants.map((participant) => {
@@ -716,7 +752,7 @@ export default function Call() {
                         : speakingUserIds.has(participant.userId)
                           ? "ring-2 ring-emerald-400/80 shadow-emerald-500/30"
                           : ""
-                        }`}
+                        } ${participants.length === 1 ? "w-full max-w-3xl" : "w-full"}`}
                       style={{ minHeight: '300px' }}
                     >
                       {/* Avatar de fondo (visible cuando no hay video) */}
@@ -778,7 +814,9 @@ export default function Call() {
               {/* Mic  */}
               <button
                 type="button"
-                onClick={toggleMic}
+                onClick={handleToggleMic}
+                title="Micrófono ( alt + M )"
+                accessKey="m"
                 className={`w-10 h-10 rounded-full grid place-items-center transition-colors ${isMicEnabled
                   ? "bg-slate-700 hover:bg-slate-600"
                   : "bg-red-700 hover:bg-red-600"
@@ -814,7 +852,9 @@ export default function Call() {
               {/* camera */}
               <button
                 type="button"
-                onClick={toggleCamera}
+                onClick={handleToggleCamera}
+                title="Cámara ( alt + C )"
+                accessKey="c"
                 className={`w-10 h-10 rounded-full grid place-items-center transition-colors ${isCameraEnabled
                   ? "bg-slate-700 hover:bg-slate-600"
                   : "bg-red-700 hover:bg-red-600"
@@ -848,54 +888,42 @@ export default function Call() {
               {/* participants */}
               <button
                 type="button"
+                title="Participantes en línea ( alt + P )"
+                accessKey="p"
                 onClick={() => setShowParticipantsPanel((prev) => !prev)}
-                className={`w-10 h-10 rounded-full grid place-items-center transition-colors ${showParticipantsPanel
+                className={`w-10 h-10 rounded-full transition-colors hidden lg:grid place-items-center ${showParticipantsPanel
                   ? "bg-emerald-600 hover:bg-emerald-500"
                   : "bg-slate-700 hover:bg-slate-600"
                   }`}
               >
-                <svg
-                  className="w-5 h-5 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M9 11a4 4 0 100-8 4 4 0 000 8zm0 0c-4.418 0-8 2.239-8 5v2h8m6-9a3 3 0 110-6 3 3 0 010 6z"
-                  />
+                <svg className="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                  <path stroke="currentColor" stroke-linecap="round" stroke-width="2" d="M16 19h4a1 1 0 0 0 1-1v-1a3 3 0 0 0-3-3h-2m-2.236-4a3 3 0 1 0 0-4M3 18v-1a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Zm8-10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                 </svg>
+
               </button>
 
               {/* Chat */}
               <button
                 type="button"
+                title="Chat en línea ( alt + H )"
+                accessKey="h"
                 onClick={() => setShowChatPanel((prev) => !prev)}
-                className={`w-10 h-10 rounded-full grid place-items-center transition-colors ${showChatPanel
+                className={`w-10 h-10 rounded-full transition-colors hidden lg:grid place-items-center ${showChatPanel
                   ? "bg-blue-600 hover:bg-blue-500"
                   : "bg-slate-700 hover:bg-slate-600"
                   }`}
               >
-                <svg
-                  className="w-5 h-5 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 3.582-8 8-8s8 3.582 8 8z"
-                  />
+                <svg className="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                  <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17h6l3 3v-3h2V9h-2M4 4h11v8H9l-3 3v-3H4V4Z" />
                 </svg>
+
               </button>
 
               {/* Info call (dots) */}
               <button
                 type="button"
+                title="Información de la llamada ( alt + I )"
+                accessKey="i"
                 onClick={() => setShowCallInfo(true)}
                 className="w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 grid place-items-center transition-colors"
               >
@@ -916,6 +944,8 @@ export default function Call() {
 
               {/* End call */}
               <button
+                type="button"
+                title="Finalizar llamada"
                 onClick={() => setShowEndCallConfirm(true)}
                 className="w-10 h-10 rounded-full bg-red-600 hover:bg-red-500 grid place-items-center transition-colors"
               >
@@ -1569,6 +1599,17 @@ export default function Call() {
           <RemoteAudio key={remote.userId} stream={remote.stream} />
         ))}
       </div>
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-slate-900/90 border border-red-500/50 text-red-200 px-4 py-3 rounded-lg shadow-xl shadow-red-900/20 backdrop-blur-md flex items-center gap-3 text-sm font-medium">
+            <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            {toastMessage}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

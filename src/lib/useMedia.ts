@@ -24,8 +24,9 @@ type UseMediaReturn = {
     remotePeerStates: Record<string, RemotePeerState>;
     isMicEnabled: boolean;
     isCameraEnabled: boolean;
-    toggleMic: () => void;
-    toggleCamera: () => void;
+    toggleMic: () => boolean;
+    toggleCamera: () => boolean;
+    error: string | null;
 };
 
 export function useMedia({ meetingId, userId }: UseMediaOptions): UseMediaReturn {
@@ -35,6 +36,7 @@ export function useMedia({ meetingId, userId }: UseMediaOptions): UseMediaReturn
 
     const [isMicEnabled, setIsMicEnabled] = useState(true);
     const [isCameraEnabled, setIsCameraEnabled] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     const socketRef = useRef<Socket | null>(null);
     const peerRef = useRef<Peer | null>(null);
@@ -92,11 +94,33 @@ export function useMedia({ meetingId, userId }: UseMediaOptions): UseMediaReturn
 
         async function initMedia() {
             try {
-                // 1) Media
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: true,
-                    video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
-                });
+                // 1) Media (fallback logic)
+                let stream: MediaStream;
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        audio: true,
+                        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
+                    });
+                } catch (originalErr: any) {
+                    console.warn("⚠️ Combined GUM failed:", originalErr.name);
+
+                    const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
+                    const videoStream = await navigator.mediaDevices.getUserMedia({
+                        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
+                    }).catch(() => null);
+
+                    if (audioStream && videoStream) {
+                        stream = new MediaStream([...audioStream.getTracks(), ...videoStream.getTracks()]);
+                    } else if (audioStream) {
+                        stream = audioStream;
+                        setIsCameraEnabled(false);
+                    } else if (videoStream) {
+                        stream = videoStream;
+                        setIsMicEnabled(false);
+                    } else {
+                        throw originalErr;
+                    }
+                }
 
                 if (cancelled) {
                     stream.getTracks().forEach((t) => t.stop());
@@ -241,8 +265,17 @@ export function useMedia({ meetingId, userId }: UseMediaOptions): UseMediaReturn
                 // Escuchar también el evento socket (legacy fallback)
                 socket.on("voice:state-change", handleData);
 
-            } catch (error) {
+            } catch (error: any) {
                 console.error("[media-hook] ❌ Error initializing:", error);
+
+                // Categorizar error
+                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                    setError("Permiso denegado para acceder a cámara/micrófono");
+                } else if (error.name === 'NotFoundError') {
+                    setError("No se encontró dispositivo de cámara o micrófono");
+                } else {
+                    setError(error.message || "Error al acceder a dispositivos multimedia");
+                }
             }
         }
 
@@ -264,7 +297,9 @@ export function useMedia({ meetingId, userId }: UseMediaOptions): UseMediaReturn
 
     const toggleMic = () => {
         const stream = localStreamRef.current;
-        if (!stream) return;
+        if (!stream) {
+            return false; // Indicamos fallo
+        }
 
         const enabled = !isMicEnabled;
         setIsMicEnabled(enabled);
@@ -272,18 +307,25 @@ export function useMedia({ meetingId, userId }: UseMediaOptions): UseMediaReturn
 
         // Broadcast  P2P
         broadcastState({ isMicEnabled: enabled, isCameraEnabled });
+        return true;
     };
 
     const toggleCamera = () => {
         const stream = localStreamRef.current;
-        if (!stream) return;
+        if (!stream) {
+            return false;
+        }
+
+        const videoTracks = stream.getVideoTracks();
+        if (videoTracks.length === 0) return false;
 
         const enabled = !isCameraEnabled;
         setIsCameraEnabled(enabled);
-        stream.getVideoTracks().forEach((t) => t.enabled = enabled);
+        videoTracks.forEach((t) => t.enabled = enabled);
 
         // Broadcast P2P
         broadcastState({ isMicEnabled, isCameraEnabled: enabled });
+        return true;
     };
 
     return {
@@ -294,5 +336,6 @@ export function useMedia({ meetingId, userId }: UseMediaOptions): UseMediaReturn
         isCameraEnabled,
         toggleMic,
         toggleCamera,
+        error
     };
 }
