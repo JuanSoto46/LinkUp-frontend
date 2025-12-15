@@ -138,6 +138,16 @@ function MainAppLayout() {
               }
             />
 
+            <Route
+              path="/user-manual"
+              element={
+                <DashboardLayout>
+                  <UserManual />
+              </DashboardLayout>
+            }
+          />
+
+
             {/* Fallback inside main layout */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

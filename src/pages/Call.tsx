@@ -722,7 +722,8 @@ export default function Call() {
                       {/* Avatar de fondo (visible cuando no hay video) */}
                       <div className="flex flex-col items-center justify-center">
                         <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${isLocal ? 'from-emerald-400 to-cyan-500' : 'from-blue-500 to-indigo-500'} grid place-items-center text-2xl font-semibold ${isLocal ? 'text-slate-950' : 'text-white'} shadow-md shadow-blue-500/30`}>
-                          {getUserInitials(participant.displayName || (isLocal ? user?.displayName : "?"))}
+                          {getUserInitials((isLocal ? user?.displayName : participant.displayName) ?? "?")}
+
                         </div>
                       </div>
 
