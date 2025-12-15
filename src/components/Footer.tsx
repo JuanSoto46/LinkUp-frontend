@@ -83,6 +83,15 @@ export default function Footer() {
                   Perfil de usuario
                 </Link>
               </li>
+              <li>
+                <Link
+                  to="/user-manual"
+                  className="text-gray-300 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-white rounded"
+                >
+                  Manual de usuario
+                </Link>
+              </li>
+
             </ul>
           </div>
 
@@ -131,7 +140,7 @@ export default function Footer() {
         <div className="border-t border-gray-800 mt-6 pt-4 text-center">
           <p className="text-gray-400 text-[11px]">
             © {currentYear} LinkUp. Prototipo educativo de
-            plataforma de videoconferencia · Sprint 3.
+            plataforma de videoconferencia · Sprint 4.
           </p>
         </div>
       </div>

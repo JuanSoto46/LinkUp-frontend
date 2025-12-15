@@ -38,6 +38,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { to: "/meetings", label: "Mis reuniones" },
     { to: "/profile", label: "Mi perfil" },
     { to: "/auth/change-password", label: "Cambiar contraseña" },
+    { to: "/user-manual", label: "Manual de usuario" },
   ];
 
   return (

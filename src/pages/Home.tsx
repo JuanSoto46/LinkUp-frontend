@@ -49,6 +49,13 @@ export default function Home() {
               >
                 <span>Explorar Plataforma</span>
               </Link>
+
+              <Link
+                to="/manual-usuario"
+                className="px-6 md:px-8 py-3 md:py-4 border-2 border-purple-500 text-purple-500 font-semibold rounded-xl hover:bg-purple-500 hover:text-white transition-all duration-300 transform hover:scale-105 flex items-center gap-2"
+              >
+                <span>Manual de usuario</span>
+                </Link>
             </>
           ) : (
             <>

@@ -14,6 +14,8 @@ import Profile from "./pages/Profile";
 import Meetings from "./pages/Meetings";
 import Call from "./pages/Call";
 import JoinMeeting from "./pages/JoinMeeting";
+import UserManual from "./pages/UserManual";
+
 
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
@@ -23,6 +25,7 @@ import ChangePassword from "./pages/auth/ChangePassword";
 // 🔹 NUEVO: contexto y mini llamada
 import { CallUiProvider } from "./context/CallUiContext";
 import { MiniCall } from "./components/MiniCall";
+
 
 /**
  * Simple auth gate for protected routes.
@@ -76,6 +79,7 @@ function MainAppLayout() {
             {/* Public */}
             <Route path="/" element={<Home />} />
             <Route path="/about" element={<About />} />
+            <Route path="/manual-usuario" element={<UserManual />} />
 
             {/* Auth */}
             <Route path="/auth/login" element={<Login />} />
@@ -133,6 +137,16 @@ function MainAppLayout() {
                 </RequireAuth>
               }
             />
+
+            <Route
+              path="/user-manual"
+              element={
+                <DashboardLayout>
+                  <UserManual />
+              </DashboardLayout>
+            }
+          />
+
 
             {/* Fallback inside main layout */}
             <Route path="*" element={<Navigate to="/" replace />} />
