@@ -81,7 +81,7 @@ export default function About() {
         {/* Project Information */}
         <section className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 transition-all duration-300 hover:shadow-xl">
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center">
-            Prototipo Educativo - Sprint 1
+            Prototipo Educativo
           </h2>
 
           <div className="grid md:grid-cols-2 gap-8">
@@ -90,15 +90,14 @@ export default function About() {
                 🎓 Contexto del Proyecto
               </h3>
               <p className="text-gray-600 dark:text-gray-300">
-                Este es un prototipo educativo desarrollado como parte del
-                Sprint 1, enfocado en la gestión de usuarios y la interfaz
-                gráfica de una plataforma de videoconferencias.
+                Este es un prototipo educativo desarrollado enfocado en la gestión de usuarios, autenticación múltiple, gestión de reuniones 
+                y la interfaz gráfica de una plataforma de videoconferencias.
               </p>
               <ul className="text-gray-600 dark:text-gray-300 space-y-2">
                 <li>✅ Gestión completa de usuarios</li>
                 <li>✅ Autenticación múltiple</li>
                 <li>✅ Interfaz responsive</li>
-                <li>✅ Experiencia moderna</li>
+                <li>✅ Experiencia moderna</li>         
               </ul>
             </div>
 

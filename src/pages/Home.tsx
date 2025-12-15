@@ -15,7 +15,7 @@ export default function Home() {
         <div className="space-y-4">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20">
             <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-            <span className="text-sm text-blue-400 font-medium">PLATAFORMA EDUCATIVA - SPRINT 1</span>
+            <span className="text-sm text-blue-400 font-medium">PLATAFORMA DE VIDEOCONFERENCIAS</span>
           </div>                
 
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight">
