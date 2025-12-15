@@ -16,17 +16,17 @@ export default function Home() {
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20">
             <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
             <span className="text-sm text-blue-400 font-medium">PLATAFORMA EDUCATIVA - SPRINT 1</span>
-          </div>
-          
+          </div>                
+
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight">
             Conecta, Colabora,{" "}
             <span className="bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
               Crea
             </span>
           </h1>
-          
+
           <p className="text-lg md:text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed">
-            La plataforma de videoconferencias diseñada para equipos modernos. 
+            La plataforma de videoconferencias diseñada para equipos modernos.
             Reuniones fluidas, colaboración en tiempo real y experiencias que conectan.
           </p>
         </div>
@@ -39,7 +39,7 @@ export default function Home() {
                 className="group px-6 md:px-8 py-3 md:py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl flex items-center gap-2"
               >
                 <span>Crear Reunión</span>
-                <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg aria-hidden="true" className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
               </Link>
@@ -57,7 +57,7 @@ export default function Home() {
                 className="group px-6 md:px-8 py-3 md:py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl flex items-center gap-2"
               >
                 <span>Comenzar Gratis</span>
-                <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg aria-hidden="true" className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
               </Link>
@@ -106,8 +106,8 @@ export default function Home() {
             description: "Video fluido y audio cristalino incluso con conexiones limitadas."
           }
         ].map((feature, index) => (
-          <div 
-            key={index} 
+          <div
+            key={index}
             className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 text-center transition-all duration-300 hover:shadow-xl hover:scale-105"
           >
             <div className="text-3xl mb-4">{feature.icon}</div>
@@ -179,7 +179,7 @@ export default function Home() {
             className="inline-flex items-center gap-2 px-6 md:px-8 py-3 md:py-4 bg-white text-blue-600 font-semibold rounded-xl hover:bg-gray-100 transition-all duration-300 transform hover:scale-105 shadow-lg"
           >
             <span>Crear Cuenta Gratis</span>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
             </svg>
           </Link>

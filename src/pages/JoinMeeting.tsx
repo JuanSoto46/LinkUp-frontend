@@ -15,7 +15,7 @@ export default function JoinMeeting() {
    */
   async function handleJoinMeeting(e: React.FormEvent) {
     e.preventDefault();
-    
+
     if (!meetingId.trim()) {
       setError("Por favor ingresa un ID de reunión válido");
       return;
@@ -35,7 +35,7 @@ export default function JoinMeeting() {
     try {
       // Aquí podrías validar con la API si la reunión existe
       // const meetingExists = await api.validateMeeting(meetingId);
-      
+
       // Por ahora, redirigimos directamente
       navigate(`/call?meetingId=${meetingId.trim()}`);
     } catch (err: any) {
@@ -61,9 +61,9 @@ export default function JoinMeeting() {
       </div>
 
       {error && (
-        <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+        <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl" role="alert">
           <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span>{error}</span>
@@ -105,13 +105,13 @@ export default function JoinMeeting() {
             ) : (
               <>
                 <span>Unirse a Reunión</span>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                 </svg>
               </>
             )}
           </button>
-          
+
           <button
             type="button"
             onClick={() => navigate("/meetings")}
@@ -124,7 +124,7 @@ export default function JoinMeeting() {
 
       <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
         <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2 flex items-center gap-2">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg aria-hidden="true" className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           ¿Dónde encuentro el ID?
